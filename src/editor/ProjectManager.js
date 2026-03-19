@@ -50,4 +50,15 @@ export class ProjectManager {
     const p = projects.find(p => p.id === id);
     if (p) { p.name = name; this.#save(projects); }
   }
+
+  importProject(jsonString) {
+    const project = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
+    if (!project.id || !project.scenes) throw new Error('Invalid project format');
+    this.saveProject(project);
+    return project;
+  }
+
+  exportProjectJSON(project) {
+    return JSON.stringify(project, null, 2);
+  }
 }

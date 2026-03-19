@@ -1,4 +1,4 @@
-import { showModal, showToast } from './utils.js';
+import { showModal, showNewSceneModal, showToast } from './utils.js';
 
 export class TopBar {
   #el = null;
@@ -6,11 +6,18 @@ export class TopBar {
   #projectManager = null;
   #onExit = null;
   #openMenu = null;
+  #onRuntime = null;
 
-  constructor(editor, projectManager, onExit) {
+  #docClickHandler = () => { this.#closeMenus(); };
+  #keyHandler = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this.#save(); }
+  };
+
+  constructor(editor, projectManager, onExit, onRuntime) {
     this.#editor = editor;
     this.#projectManager = projectManager;
     this.#onExit = onExit;
+    this.#onRuntime = onRuntime;
   }
 
   mount(parent) {
@@ -18,94 +25,196 @@ export class TopBar {
     this.#el.className = 'editor-topbar';
     parent.appendChild(this.#el);
     this.#render();
-    this.#wireEvents();
+    document.addEventListener('keydown', this.#keyHandler);
+    document.addEventListener('click', this.#docClickHandler);
   }
 
-  destroy() { this.#el?.remove(); }
+  destroy() {
+    document.removeEventListener('keydown', this.#keyHandler);
+    document.removeEventListener('click', this.#docClickHandler);
+    this.#el?.remove();
+  }
 
   #render() {
     const name = this.#editor.project.name;
     this.#el.innerHTML = `
-      <div class="topbar-menu">
-        <button class="topbar-btn" data-menu="file">
-          File
-          <div class="topbar-dropdown" id="menu-file">
-            <div class="topbar-dropdown-item" data-action="new-scene">New Scene</div>
-            <div class="topbar-dropdown-sep"></div>
-            <div class="topbar-dropdown-item" data-action="save">Save Project <span style="color:#666;font-size:11px">Ctrl+S</span></div>
-            <div class="topbar-dropdown-sep"></div>
-            <div class="topbar-dropdown-item danger" data-action="exit">Exit to Dashboard</div>
-          </div>
-        </button>
-        <button class="topbar-btn" data-menu="scene">
-          Scene
-          <div class="topbar-dropdown" id="menu-scene">
-            <div class="topbar-dropdown-item" data-action="rename-scene">Rename Scene</div>
-            <div class="topbar-dropdown-item danger" data-action="delete-scene">Delete Scene</div>
-          </div>
-        </button>
+      <div class="topbar-menu" id="topbar-menu">
+        <button class="topbar-btn" id="tbtn-scene">Scene</button>
+        <button class="topbar-btn" id="tbtn-project">Project</button>
       </div>
-      <div class="topbar-title">${this.#esc(name)} &#8212; ${this.#currentSceneName()}</div>
+      <div class="topbar-title">${this.#esc(name)} &mdash; ${this.#currentSceneName()}</div>
       <div class="topbar-right">
+        <button class="topbar-btn" id="tbtn-play" style="color:var(--success);font-weight:700;padding:0 14px;">&#9654; Play</button>
         <span class="topbar-badge" id="save-badge">Unsaved</span>
       </div>
     `;
-  }
 
-  #currentSceneName() {
-    const s = this.#editor.project.scenes[this.#editor.currentSceneIndex];
-    return s ? this.#esc(s.name) : 'Scene';
-  }
+    this.#buildSceneMenu();
+    this.#buildProjectMenu();
 
-  #wireEvents() {
-    // Menu open/close
-    this.#el.querySelectorAll('[data-menu]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const menuId = 'menu-' + btn.dataset.menu;
-        const dropdown = btn.querySelector('.topbar-dropdown');
-        if (this.#openMenu && this.#openMenu !== dropdown) {
-          this.#openMenu.classList.remove('open');
-        }
-        dropdown.classList.toggle('open');
-        this.#openMenu = dropdown.classList.contains('open') ? dropdown : null;
-      });
-    });
-
-    document.addEventListener('click', () => {
-      this.#openMenu?.classList.remove('open');
-      this.#openMenu = null;
-    });
-
-    // Actions
-    this.#el.addEventListener('click', async (e) => {
-      const item = e.target.closest('[data-action]');
-      if (!item) return;
+    this.#el.querySelector('#tbtn-play').addEventListener('click', (e) => {
       e.stopPropagation();
-      this.#closeMenus();
-      switch (item.dataset.action) {
-        case 'save': this.#save(); break;
-        case 'exit': this.#exit(); break;
-        case 'new-scene': await this.#newScene(); break;
-        case 'rename-scene': await this.#renameScene(); break;
-        case 'delete-scene': this.#deleteScene(); break;
+      this.#onRuntime?.();
+    });
+
+    this.#editor.on('project:saved', () => {
+      const badge = this.#el?.querySelector('#save-badge');
+      if (badge) {
+        badge.textContent = 'Saved'; badge.style.color = 'var(--success)';
+        setTimeout(() => { if (badge) { badge.textContent = 'Unsaved'; badge.style.color = ''; } }, 2000);
       }
     });
+    this.#editor.on('scene:switched', () => this.#refreshTitle());
+    this.#editor.on('scenes:changed', () => this.#rebuildSceneMenu());
+  }
 
-    // Keyboard shortcut
-    document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this.#save(); }
+  #buildSceneMenu() {
+    const btn = this.#el.querySelector('#tbtn-scene');
+    if (!btn) return;
+    btn.style.position = 'relative';
+
+    const buildDropdown = () => {
+      const dropdown = document.createElement('div');
+      dropdown.className = 'topbar-dropdown';
+      dropdown.id = 'dropdown-scene';
+
+      const staticTop = [
+        { label: '&#10010; New Scene', action: 'new-scene' },
+        { label: 'Save Scene <kbd style="font-size:10px;opacity:0.6">Ctrl+S</kbd>', action: 'save' },
+        { sep: true },
+      ];
+      for (const item of staticTop) {
+        if (item.sep) { dropdown.appendChild(this.#makeSep()); continue; }
+        dropdown.appendChild(this.#makeItem(item.label, item.action));
+      }
+
+      // Dynamic scene list
+      const scenes = this.#editor.project.scenes;
+      const active = this.#editor.currentSceneIndex;
+      for (let i = 0; i < scenes.length; i++) {
+        const isActive = i === active;
+        const item = document.createElement('div');
+        item.className = 'topbar-dropdown-item' + (isActive ? ' scene-active' : '');
+        item.innerHTML = `<span style="width:14px;display:inline-block;color:var(--accent)">${isActive ? '&#10003;' : ''}</span> ${this.#esc(scenes[i].name)}`;
+        const idx = i;
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.#closeMenus();
+          if (idx !== this.#editor.currentSceneIndex) this.#editor.switchScene(idx);
+        });
+        dropdown.appendChild(item);
+      }
+
+      const staticBottom = [
+        { sep: true },
+        { label: 'Rename Scene', action: 'rename-scene' },
+        { label: 'Delete Scene', action: 'delete-scene', danger: true },
+      ];
+      for (const item of staticBottom) {
+        if (item.sep) { dropdown.appendChild(this.#makeSep()); continue; }
+        dropdown.appendChild(this.#makeItem(item.label, item.action, item.danger));
+      }
+
+      return dropdown;
+    };
+
+    let dropdown = buildDropdown();
+    btn.appendChild(dropdown);
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = dropdown.classList.contains('open');
+      this.#closeMenus();
+      if (!isOpen) { dropdown.classList.add('open'); this.#openMenu = dropdown; }
     });
 
-    // Listen for save event
-    this.#editor.on('project:saved', () => {
-      const badge = this.#el.querySelector('#save-badge');
-      if (badge) { badge.textContent = 'Saved'; badge.style.color = 'var(--success)'; setTimeout(() => { if (badge) { badge.textContent = 'Unsaved'; badge.style.color = ''; } }, 2000); }
+    // Store rebuild function for later
+    btn._rebuildDropdown = () => {
+      dropdown.remove();
+      dropdown = buildDropdown();
+      btn.appendChild(dropdown);
+    };
+  }
+
+  #rebuildSceneMenu() {
+    const btn = this.#el?.querySelector('#tbtn-scene');
+    btn?._rebuildDropdown?.();
+    this.#refreshTitle();
+  }
+
+  #buildProjectMenu() {
+    this.#buildDropdown('tbtn-project', [
+      { label: '&#10010; New Project', action: 'new-project' },
+      { label: 'Save Project', action: 'save-project' },
+      { sep: true },
+      { label: 'Export Project (.json)', action: 'export-project' },
+      { label: '&#127918; Export Game (HTML)', action: 'export-game' },
+      { sep: true },
+      { label: '&#9881; Settings', action: 'settings' },
+      { sep: true },
+      { label: 'Exit to Dashboard', action: 'exit', danger: true },
+    ]);
+  }
+
+  #makeItem(label, action, danger = false) {
+    const el = document.createElement('div');
+    el.className = 'topbar-dropdown-item' + (danger ? ' danger' : '');
+    el.innerHTML = label;
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.#closeMenus();
+      this.#handleAction(action);
     });
-    this.#editor.on('scene:switched', () => this.#render());
+    return el;
+  }
+
+  #makeSep() {
+    const sep = document.createElement('div');
+    sep.className = 'topbar-dropdown-sep';
+    return sep;
+  }
+
+  #buildDropdown(btnId, items) {
+    const btn = this.#el.querySelector('#' + btnId);
+    if (!btn) return;
+    btn.style.position = 'relative';
+    const dropdown = document.createElement('div');
+    dropdown.className = 'topbar-dropdown';
+    for (const item of items) {
+      if (item.sep) { dropdown.appendChild(this.#makeSep()); continue; }
+      dropdown.appendChild(this.#makeItem(item.label, item.action, item.danger));
+    }
+    btn.appendChild(dropdown);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = dropdown.classList.contains('open');
+      this.#closeMenus();
+      if (!isOpen) { dropdown.classList.add('open'); this.#openMenu = dropdown; }
+    });
+  }
+
+  async #handleAction(action) {
+    switch (action) {
+      case 'save': this.#save(); break;
+      case 'new-scene': await this.#newScene(); break;
+      case 'rename-scene': await this.#renameScene(); break;
+      case 'delete-scene': this.#deleteScene(); break;
+      case 'new-project': await this.#newProject(); break;
+      case 'save-project': this.#saveProject(); break;
+      case 'export-project': this.#exportProject(); break;
+      case 'export-game': this.#exportGame(); break;
+      case 'settings': showToast('Settings coming soon'); break;
+      case 'exit': this.#exit(); break;
+    }
   }
 
   #save() {
+    this.#editor.saveProject();
+    this.#projectManager.saveProject(this.#editor.project);
+    showToast('Scene saved', 'success');
+  }
+
+  #saveProject() {
     this.#editor.saveProject();
     this.#projectManager.saveProject(this.#editor.project);
     showToast('Project saved', 'success');
@@ -117,9 +226,9 @@ export class TopBar {
   }
 
   async #newScene() {
-    const name = await showModal('New Scene', 'Scene name:', 'New Scene');
-    if (!name) return;
-    const idx = this.#editor.addScene(name);
+    const result = await showNewSceneModal();
+    if (!result) return;
+    const idx = this.#editor.addScene(result.name, result.copy);
     this.#editor.switchScene(idx);
   }
 
@@ -128,7 +237,8 @@ export class TopBar {
     const name = await showModal('Rename Scene', 'Scene name:', current?.name ?? '');
     if (!name) return;
     this.#editor.renameScene(this.#editor.currentSceneIndex, name);
-    this.#render();
+    this.#refreshTitle();
+    this.#rebuildSceneMenu();
   }
 
   #deleteScene() {
@@ -138,10 +248,181 @@ export class TopBar {
     this.#editor.deleteScene(this.#editor.currentSceneIndex);
   }
 
+  async #newProject() {
+    const name = await showModal('New Project', 'Project name:', 'My Project');
+    if (!name) return;
+    const project = this.#projectManager.createProject(name);
+    showToast(`Project "${project.name}" created — open from dashboard`, 'success');
+  }
+
+  #exportProject() {
+    this.#editor.saveProject();
+    const data = JSON.stringify(this.#editor.project, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${this.#editor.project.name.replace(/\s+/g, '_')}.ecs.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Project exported', 'success');
+  }
+
+  #exportGame() {
+    this.#editor.saveProject();
+    const project = this.#editor.project;
+    const sceneIdx = project.currentSceneIndex ?? 0;
+    const sceneName = project.scenes[sceneIdx]?.name ?? 'Scene';
+    const gameDataJson = JSON.stringify(project);
+
+    const runtimeCode = `
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+document.getElementById('loading').style.display = 'none';
+
+const GAME_DATA = ${gameDataJson};
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a1a);
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1000);
+camera.position.set(5, 5, 8);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.1;
+
+const sceneIdx = GAME_DATA.currentSceneIndex ?? 0;
+const sceneData = GAME_DATA.scenes[sceneIdx];
+if (sceneData?.worldData) loadScene(sceneData.worldData);
+
+function loadScene(worldData) {
+  const objs = new Map();
+  for (const { id, components: c } of worldData.entities) {
+    let obj = null;
+    if ('GroupComponent' in c) {
+      obj = new THREE.Group();
+    } else if (c.MeshComponent) {
+      const geoFn = {
+        box: () => new THREE.BoxGeometry(1,1,1),
+        sphere: () => new THREE.SphereGeometry(0.5,32,32),
+        cone: () => new THREE.ConeGeometry(0.5,1,32),
+        cylinder: () => new THREE.CylinderGeometry(0.5,0.5,1,32),
+        capsule: () => new THREE.CapsuleGeometry(0.3,0.6,4,16),
+        plane: () => new THREE.PlaneGeometry(1,1),
+      };
+      const geo = (geoFn[c.MeshComponent.type] ?? geoFn.box)();
+      const mat = new THREE.MeshStandardMaterial({ color: c.MeshComponent.color });
+      obj = new THREE.Mesh(geo, mat);
+    } else if (c.LightComponent) {
+      const grp = new THREE.Group();
+      const lc = c.LightComponent;
+      let light;
+      if (lc.type === 'directional') light = new THREE.DirectionalLight(lc.color, lc.intensity);
+      else if (lc.type === 'spot') light = new THREE.SpotLight(lc.color, lc.intensity);
+      else light = new THREE.PointLight(lc.color, lc.intensity);
+      grp.add(light);
+      obj = grp;
+    } else if ('PlayerStartComponent' in c && c.TransformComponent) {
+      const p = c.TransformComponent.position;
+      camera.position.set(p[0], p[1] + 2, p[2] + 6);
+      camera.lookAt(p[0], p[1], p[2]);
+      controls.target.set(p[0], p[1], p[2]);
+      continue;
+    } else if ('TriggerComponent' in c) {
+      continue;
+    } else {
+      obj = new THREE.Object3D();
+    }
+    if (c.TransformComponent && obj) {
+      const t = c.TransformComponent;
+      obj.position.fromArray(t.position);
+      obj.rotation.set(t.rotation[0], t.rotation[1], t.rotation[2], t.rotation[3]);
+      obj.scale.fromArray(t.scale);
+    }
+    objs.set(id, obj);
+  }
+  for (const { id, components: c } of worldData.entities) {
+    const obj = objs.get(id);
+    if (!obj) continue;
+    if (c.ParentComponent) {
+      const parent = objs.get(c.ParentComponent.parentId);
+      if (parent) { parent.add(obj); continue; }
+    }
+    scene.add(obj);
+  }
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+(function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+`;
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${project.name}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#000;overflow:hidden}
+    canvas{display:block}
+    #loading{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;color:#fff;font-family:system-ui;font-size:20px;letter-spacing:2px}
+    #hud{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.3);font-family:system-ui;font-size:11px;pointer-events:none;white-space:nowrap}
+  </style>
+</head>
+<body>
+  <div id="loading">Loading...</div>
+  <div id="hud">${sceneName} &nbsp;|&nbsp; Orbit: drag &nbsp;|&nbsp; Zoom: scroll</div>
+  <script type="importmap">
+  {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/"}}
+  </script>
+  <script type="module">${runtimeCode}</script>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${project.name.replace(/\s+/g, '_')}_game.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Game exported as HTML', 'success');
+  }
+
+  #refreshTitle() {
+    const title = this.#el?.querySelector('.topbar-title');
+    if (title) title.innerHTML = `${this.#esc(this.#editor.project.name)} &mdash; ${this.#currentSceneName()}`;
+  }
+
   #closeMenus() {
-    this.#el.querySelectorAll('.topbar-dropdown').forEach(d => d.classList.remove('open'));
+    this.#el?.querySelectorAll('.topbar-dropdown').forEach(d => d.classList.remove('open'));
     this.#openMenu = null;
   }
 
-  #esc(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+  #currentSceneName() {
+    const s = this.#editor.project.scenes[this.#editor.currentSceneIndex];
+    return s ? this.#esc(s.name) : 'Scene';
+  }
+
+  #esc(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 }

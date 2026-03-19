@@ -1,3 +1,5 @@
+import { makeCollapsiblePanel } from './utils.js';
+
 export class PrefabsPanel {
   #el = null;
   #editor = null;
@@ -7,7 +9,7 @@ export class PrefabsPanel {
   mount(parent) {
     this.#el = document.createElement('div');
     this.#el.className = 'panel';
-    this.#el.style.cssText = 'flex:1;min-height:0;overflow-y:auto;';
+    this.#el.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column;';
     parent.appendChild(this.#el);
     this.#render();
   }
@@ -16,8 +18,8 @@ export class PrefabsPanel {
 
   #render() {
     this.#el.innerHTML = `
-      <div class="panel-header"><span>&#128736; Prefabs</span></div>
-      <div class="panel-content">
+      <div class="panel-header" id="prefabs-header"><span>&#128736; Elements</span></div>
+      <div class="panel-content" id="prefabs-content" style="overflow-y:auto;flex:1;">
         <div class="prefab-section-title">Primitives</div>
         <div class="prefab-grid">
           <button class="prefab-btn" data-spawn="cube"><span class="icon">&#9635;</span>Cube</button>
@@ -33,6 +35,10 @@ export class PrefabsPanel {
           <button class="prefab-btn" data-spawn="dirlight"><span class="icon">&#9728;</span>Directional</button>
           <button class="prefab-btn" data-spawn="spotlight"><span class="icon">&#128294;</span>Spot</button>
         </div>
+        <div class="prefab-section-title">Camera</div>
+        <div class="prefab-grid">
+          <button class="prefab-btn" data-spawn="camera"><span class="icon">&#127909;</span>Camera</button>
+        </div>
         <div class="prefab-section-title">Triggers</div>
         <div class="prefab-grid">
           <button class="prefab-btn" data-spawn="spheretrigger"><span class="icon">&#128993;</span>SphereTrigger</button>
@@ -45,6 +51,12 @@ export class PrefabsPanel {
       </div>
     `;
 
+    makeCollapsiblePanel(
+      this.#el.querySelector('#prefabs-header'),
+      this.#el.querySelector('#prefabs-content'),
+      true
+    );
+
     const spawnMap = {
       cube: () => this.#editor.spawnCube(),
       sphere: () => this.#editor.spawnSphere(),
@@ -55,6 +67,7 @@ export class PrefabsPanel {
       pointlight: () => this.#editor.spawnPointLight(),
       dirlight: () => this.#editor.spawnDirectionalLight(),
       spotlight: () => this.#editor.spawnSpotLight(),
+      camera: () => this.#editor.spawnCamera(),
       spheretrigger: () => this.#editor.spawnSphereTrigger(),
       boxtrigger: () => this.#editor.spawnBoxTrigger(),
       playerstart: () => this.#editor.spawnPlayerStart(),

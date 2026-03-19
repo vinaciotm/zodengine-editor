@@ -1,13 +1,18 @@
+import { makeCollapsiblePanel } from './utils.js';
 import { TagComponent } from '../components/TagComponent.js';
 import { MeshComponent } from '../components/MeshComponent.js';
 import { LightComponent } from '../components/LightComponent.js';
 import { TriggerComponent } from '../components/TriggerComponent.js';
 import { PlayerStartComponent } from '../components/PlayerStartComponent.js';
+import { GroupComponent } from '../components/GroupComponent.js';
+import { ParentComponent } from '../components/ParentComponent.js';
+import { CameraComponent } from '../components/CameraComponent.js';
 
 export class HierarchyPanel {
   #el = null;
   #editor = null;
   #unsubs = [];
+  #contentEl = null;
 
   constructor(editor) { this.#editor = editor; }
 
@@ -16,10 +21,30 @@ export class HierarchyPanel {
     this.#el.className = 'panel';
     this.#el.style.cssText = 'flex:1;min-height:0;';
     parent.appendChild(this.#el);
+
+    const header = document.createElement('div');
+    header.className = 'panel-header';
+    header.innerHTML = `
+      <span>&#128279; GameObjects</span>
+      <div class="panel-header-actions">
+        <button class="btn-icon btn" title="Deselect all" id="hier-deselect">&#215;</button>
+      </div>
+    `;
+    this.#el.appendChild(header);
+
+    this.#contentEl = document.createElement('div');
+    this.#contentEl.className = 'panel-content';
+    this.#contentEl.id = 'hier-content';
+    this.#el.appendChild(this.#contentEl);
+
+    makeCollapsiblePanel(header, this.#contentEl, true);
+    header.querySelector('#hier-deselect').addEventListener('click', () => this.#editor.clearSelection());
+
     this.#render();
     this.#unsubs.push(
       this.#editor.on('hierarchy:changed', () => this.#render()),
       this.#editor.on('entity:selected', () => this.#render()),
+      this.#editor.on('selection:changed', () => this.#render()),
     );
   }
 
@@ -32,57 +57,115 @@ export class HierarchyPanel {
     const editor = this.#editor;
     const entities = editor.world?.entities ?? [];
     const sel = editor.selectedEntityId;
+    const selIds = editor.selectedEntityIds;
+    const content = this.#contentEl;
+    if (!content) return;
 
-    this.#el.innerHTML = `
-      <div class="panel-header">
-        <span>&#128279; Hierarchy</span>
-        <div class="panel-header-actions">
-          <button class="btn-icon btn" title="Deselect all" id="hier-deselect">&#215;</button>
-        </div>
-      </div>
-      <div class="panel-content" id="hier-content"></div>
-    `;
-
-    this.#el.querySelector('#hier-deselect').addEventListener('click', () => editor.selectEntity(null));
-    const content = this.#el.querySelector('#hier-content');
+    content.innerHTML = '';
 
     if (entities.length === 0) {
       content.innerHTML = '<div class="hierarchy-empty">No entities in scene</div>';
       return;
     }
 
-    for (const id of entities) {
+    const roots = entities.filter(id => !editor.world.hasComponent(id, ParentComponent));
+
+    const renderEntity = (id, depth = 0) => {
       const tag = editor.world.getComponent(id, TagComponent);
       const name = tag?.name ?? `Entity ${id}`;
       const icon = this.#getIcon(id);
+      const isSelected = selIds.has(id) || id === sel;
+      const isGroup = editor.world.hasComponent(id, GroupComponent);
 
       const row = document.createElement('div');
-      row.className = 'hierarchy-item' + (id === sel ? ' selected' : '');
+      row.className = 'hierarchy-item' + (isSelected ? ' selected' : '');
       row.dataset.entityId = id;
-      row.innerHTML = `
-        <span class="hierarchy-item-indent"></span>
-        <span class="hierarchy-item-icon">${icon}</span>
-        <span class="hierarchy-item-name">${this.#esc(name)}</span>
-        <span class="hierarchy-item-del" title="Delete">&#215;</span>
-      `;
+
+      const indentEl = document.createElement('span');
+      indentEl.className = 'hierarchy-item-indent';
+      indentEl.style.width = (16 + depth * 16) + 'px';
+
+      const iconEl = document.createElement('span');
+      iconEl.className = 'hierarchy-item-icon';
+      iconEl.innerHTML = icon;
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'hierarchy-item-name';
+      nameEl.textContent = name;
+
+      const actionsEl = document.createElement('span');
+      actionsEl.style.cssText = 'display:flex;gap:2px;flex-shrink:0;';
+
+      if (isGroup) {
+        const ungroupBtn = document.createElement('span');
+        ungroupBtn.className = 'hierarchy-item-del';
+        ungroupBtn.title = 'Ungroup';
+        ungroupBtn.innerHTML = '&#127968;';
+        ungroupBtn.style.opacity = '0';
+        ungroupBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          editor.ungroupEntity(id);
+        });
+        actionsEl.appendChild(ungroupBtn);
+        row.addEventListener('mouseover', () => { ungroupBtn.style.opacity = '1'; });
+        row.addEventListener('mouseleave', () => { ungroupBtn.style.opacity = '0'; });
+      }
+
+      const delBtn = document.createElement('span');
+      delBtn.className = 'hierarchy-item-del';
+      delBtn.title = 'Delete';
+      delBtn.innerHTML = '&#215;';
+      actionsEl.appendChild(delBtn);
+
+      row.appendChild(indentEl);
+      row.appendChild(iconEl);
+      row.appendChild(nameEl);
+      row.appendChild(actionsEl);
 
       row.addEventListener('click', (e) => {
-        if (e.target.classList.contains('hierarchy-item-del')) return;
-        editor.selectEntity(id);
+        if (e.target.classList.contains('hierarchy-item-del') || e.target.closest('.hierarchy-item-del')) return;
+        if (e.shiftKey) {
+          const newSet = new Set(editor.selectedEntityIds);
+          if (newSet.has(id)) newSet.delete(id);
+          else newSet.add(id);
+          editor.selectedEntityIds.clear();
+          for (const sid of newSet) editor.selectedEntityIds.add(sid);
+          editor.selectedEntityId = [...editor.selectedEntityIds].at(-1) ?? null;
+          if (editor.selectedEntityId) {
+            const obj = editor.renderSystem.getObject3D(editor.selectedEntityId);
+            if (obj) editor.transformControls.attach(obj);
+          } else {
+            editor.transformControls.detach();
+          }
+          editor.emit('entity:selected', editor.selectedEntityId);
+          editor.emit('selection:changed', editor.selectedEntityIds, editor.selectedEntityId);
+        } else {
+          editor.selectEntity(id);
+        }
       });
 
-      row.querySelector('.hierarchy-item-name').addEventListener('dblclick', (e) => {
+      nameEl.addEventListener('dblclick', (e) => {
         e.stopPropagation();
-        this.#startRename(id, e.target);
+        this.#startRename(id, nameEl);
       });
 
-      row.querySelector('.hierarchy-item-del').addEventListener('click', (e) => {
+      delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         editor.deleteEntity(id);
       });
 
       content.appendChild(row);
-    }
+
+      if (isGroup) {
+        const children = entities.filter(cid => {
+          const p = editor.world.getComponent(cid, ParentComponent);
+          return p?.parentId === id;
+        });
+        for (const cid of children) renderEntity(cid, depth + 1);
+      }
+    };
+
+    for (const id of roots) renderEntity(id, 0);
   }
 
   #startRename(entityId, nameEl) {
@@ -106,12 +189,12 @@ export class HierarchyPanel {
 
   #getIcon(entityId) {
     const w = this.#editor.world;
+    if (w.hasComponent(entityId, GroupComponent)) return '&#128193;';
     if (w.hasComponent(entityId, LightComponent)) return '&#128161;';
+    if (w.hasComponent(entityId, CameraComponent)) return '&#127909;';
     if (w.hasComponent(entityId, TriggerComponent)) return '&#128993;';
     if (w.hasComponent(entityId, PlayerStartComponent)) return '&#128694;';
     if (w.hasComponent(entityId, MeshComponent)) return '&#9632;';
     return '&#9711;';
   }
-
-  #esc(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 }

@@ -15,7 +15,6 @@ export function showModal(title, label, defaultValue = '') {
     document.body.appendChild(overlay);
     const input = overlay.querySelector('.modal-input');
     input.select();
-
     const finish = (val) => { overlay.remove(); resolve(val); };
     overlay.querySelector('#modal-ok').addEventListener('click', () => finish(input.value.trim() || null));
     overlay.querySelector('#modal-cancel').addEventListener('click', () => finish(null));
@@ -24,6 +23,39 @@ export function showModal(title, label, defaultValue = '') {
       if (e.key === 'Escape') finish(null);
     });
     overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(null); });
+  });
+}
+
+export function showNewSceneModal() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal">
+        <h2>New Scene</h2>
+        <input class="modal-input" type="text" value="New Scene" placeholder="Scene name" />
+        <label class="modal-checkbox-row">
+          <input type="checkbox" id="modal-copy-cb" />
+          <span>Copy objects from current scene</span>
+        </label>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+          <button class="btn btn-primary" id="modal-ok">Create</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector('.modal-input');
+    const cb = overlay.querySelector('#modal-copy-cb');
+    input.select();
+    const finish = (name, copy) => { overlay.remove(); resolve(name ? { name, copy } : null); };
+    overlay.querySelector('#modal-ok').addEventListener('click', () => finish(input.value.trim() || null, cb.checked));
+    overlay.querySelector('#modal-cancel').addEventListener('click', () => finish(null, false));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') finish(input.value.trim() || null, cb.checked);
+      if (e.key === 'Escape') finish(null, false);
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(null, false); });
   });
 }
 
@@ -51,4 +83,32 @@ export function colorToHex(num) {
 
 export function hexToNum(hex) {
   return parseInt(hex.replace('#', ''), 16);
+}
+
+export function makeCollapsiblePanel(headerEl, contentEl, initialOpen = true) {
+  let open = initialOpen;
+  // Find the parent panel element to manage its flex
+  const panelEl = headerEl.parentElement;
+  const savedFlex = panelEl?.style.flex || '';
+
+  const chevron = document.createElement('span');
+  chevron.className = 'panel-chevron';
+  chevron.innerHTML = open ? '&#9660;' : '&#9654;';
+  chevron.style.cssText = 'font-size:9px;margin-right:6px;transition:transform 0.15s;display:inline-block;flex-shrink:0;';
+  headerEl.insertBefore(chevron, headerEl.firstChild);
+
+  if (!open) {
+    contentEl.style.display = 'none';
+    if (panelEl) panelEl.style.flex = '0 0 auto';
+  }
+
+  headerEl.style.cursor = 'pointer';
+  headerEl.addEventListener('click', (e) => {
+    // Don't collapse when clicking action buttons
+    if (e.target.closest('.panel-header-actions')) return;
+    open = !open;
+    contentEl.style.display = open ? '' : 'none';
+    chevron.innerHTML = open ? '&#9660;' : '&#9654;';
+    if (panelEl) panelEl.style.flex = open ? savedFlex : '0 0 auto';
+  });
 }

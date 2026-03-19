@@ -4,6 +4,8 @@ import { InspectorPanel } from './InspectorPanel.js';
 import { PrefabsPanel } from './PrefabsPanel.js';
 import { ScenesPanel } from './ScenesPanel.js';
 import { TransformToolbar } from './TransformToolbar.js';
+import { GroupActionBar } from './GroupActionBar.js';
+import { Runtime } from '../runtime/Runtime.js';
 
 export class EditorLayout {
   #el = null;
@@ -11,6 +13,7 @@ export class EditorLayout {
   #projectManager = null;
   #onExit = null;
   #panels = [];
+  #runtime = null;
 
   constructor(editor, projectManager, onExit) {
     this.#editor = editor;
@@ -29,17 +32,16 @@ export class EditorLayout {
     const editor = this.#editor;
     const el = this.#el;
 
-    // Top bar
-    const topBar = new TopBar(editor, this.#projectManager, this.#onExit);
+    const onRuntime = () => this.#startRuntime();
+
+    const topBar = new TopBar(editor, this.#projectManager, this.#onExit, onRuntime);
     topBar.mount(el);
     this.#panels.push(topBar);
 
-    // Body
     const body = document.createElement('div');
     body.className = 'editor-body';
     el.appendChild(body);
 
-    // Left panel
     const left = document.createElement('div');
     left.className = 'editor-left';
     body.appendChild(left);
@@ -52,7 +54,6 @@ export class EditorLayout {
     scenes.mount(left);
     this.#panels.push(scenes);
 
-    // Center panel
     const center = document.createElement('div');
     center.className = 'editor-center';
     body.appendChild(center);
@@ -63,12 +64,16 @@ export class EditorLayout {
 
     const viewport = document.createElement('div');
     viewport.className = 'viewport-wrapper';
+    viewport.style.position = 'relative';
     center.appendChild(viewport);
 
-    // Initialize editor (creates renderer, attaches canvas)
+    // Group action bar overlay above viewport
+    const groupBar = new GroupActionBar(editor);
+    groupBar.mount(viewport);
+    this.#panels.push(groupBar);
+
     await editor.init(viewport);
 
-    // Right panel
     const right = document.createElement('div');
     right.className = 'editor-right';
     body.appendChild(right);
@@ -86,7 +91,15 @@ export class EditorLayout {
     this.#panels.push(inspector);
   }
 
+  async #startRuntime() {
+    this.#editor.saveCurrentScene();
+    const sceneData = this.#editor.project.scenes[this.#editor.currentSceneIndex];
+    this.#runtime = new Runtime(() => { this.#runtime = null; });
+    await this.#runtime.start(sceneData);
+  }
+
   destroy() {
+    this.#runtime?.stop();
     this.#panels.forEach(p => p.destroy?.());
     this.#editor.destroy();
     this.#el?.remove();

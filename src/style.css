@@ -134,10 +134,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-d
 .panel-header {
   background: var(--panel-header); border-bottom: 1px solid var(--border);
   padding: 7px 12px; font-size: 12px; font-weight: 600; color: var(--text-bright);
-  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
-  text-transform: uppercase; letter-spacing: 0.5px;
+  display: flex; align-items: center; justify-content: flex-start; flex-shrink: 0;
+  text-transform: uppercase; letter-spacing: 0.5px; gap: 4px; cursor: default;
 }
-.panel-header-actions { display: flex; gap: 4px; }
+.panel-header-actions { display: flex; gap: 4px; margin-left: auto; }
 .panel-content { flex: 1; overflow-y: auto; overflow-x: hidden; }
 .panel-content::-webkit-scrollbar { width: 6px; }
 .panel-content::-webkit-scrollbar-track { background: transparent; }
@@ -285,3 +285,67 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-d
 }
 .toast.success { border-color: var(--success); color: var(--success); }
 @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+/* ===================== INSPECTOR AXIS FIELD ===================== */
+.inspector-field-axis { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+
+/* ===================== MODAL CHECKBOX ROW ===================== */
+.modal-checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; cursor: pointer; font-size: 13px; color: var(--text); }
+.modal-checkbox-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+
+/* ===================== REMOVE NUMBER INPUT SPINNERS ===================== */
+.inspector-input[type="number"]::-webkit-inner-spin-button,
+.inspector-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.inspector-input[type="number"] { -moz-appearance: textfield; }
+
+/* Group action bar */
+.group-action-bar {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  background: rgba(30,30,30,0.95); border: 1px solid var(--accent);
+  border-radius: 6px; padding: 6px 12px; display: flex; align-items: center;
+  gap: 10px; z-index: 500; box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  white-space: nowrap; pointer-events: all;
+}
+.group-bar-label { font-size: 12px; color: var(--text-dim); }
+.group-bar-btn {
+  padding: 4px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;
+  font-family: var(--font); border: 1px solid var(--border); background: var(--bg-panel2); color: var(--text);
+  transition: all 0.1s;
+}
+.group-bar-btn:hover { background: var(--bg-hover); color: var(--text-bright); }
+.group-bar-btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+.group-bar-btn.primary:hover { background: #0090f0; }
+.group-bar-btn kbd { font-size: 10px; opacity: 0.7; font-family: monospace; }
+
+/* Vec3 compact layout (label above, 3 inputs in a row) */
+.vec3-group { padding: 2px 12px 6px; }
+.vec3-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; font-weight: 600; }
+.vec3-inputs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.vec3-input-wrap { display: flex; align-items: center; gap: 3px; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; }
+.vec3-input-wrap:focus-within { border-color: var(--accent); }
+.vec3-input-wrap .xyz-label { width: 10px; flex-shrink: 0; font-size: 10px; font-weight: 700; }
+.vec3-input-wrap .inspector-input { background: transparent; border: none; padding: 2px 0; font-size: 12px; width: 0; flex: 1; min-width: 0; }
+.vec3-input-wrap .inspector-input:focus { border: none; outline: none; }
+/* Active scene item in dropdown */
+.topbar-dropdown-item.scene-active { color: var(--accent2); }
+
+/* ===================== VIEW MODE SELECT ===================== */
+.view-mode-select {
+  background: var(--bg-panel2); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--text); font-size: 11px; padding: 3px 6px; outline: none;
+  font-family: var(--font); cursor: pointer; height: 24px;
+}
+.view-mode-select:focus { border-color: var(--accent); }
+
+/* ===================== SCENE THUMBNAIL ===================== */
+.scene-thumb {
+  width: 40px; height: 28px; object-fit: cover; border-radius: 3px;
+  flex-shrink: 0; border: 1px solid var(--border); background: var(--bg-dark);
+}
+
+/* ===================== PROJECT CARD THUMBNAIL ===================== */
+.project-card-thumb {
+  width: 100%; height: 80px; object-fit: cover; border-radius: 4px;
+  border: 1px solid var(--border); background: var(--bg-dark); margin-bottom: 4px;
+  display: block;
+}
