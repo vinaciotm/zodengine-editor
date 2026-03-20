@@ -1,4 +1,5 @@
-import { showModal, showToast } from './utils.js';
+import { showModal, showToast, showConfirm } from './utils.js';
+import { sfx } from './sfx.js';
 
 export class Dashboard {
   #el = null;
@@ -62,6 +63,23 @@ export class Dashboard {
 
     this.#buildEditorMenu();
     this.#buildProjectMenu();
+
+    // Logo bounce + winner sound
+    const logo = this.#el.querySelector('.topbar-brand-logo');
+    if (logo) {
+      logo.style.cursor = 'pointer';
+      logo.addEventListener('click', () => {
+        sfx.win();
+        logo.classList.remove('logo-bounce');
+        requestAnimationFrame(() => logo.classList.add('logo-bounce'));
+      });
+      logo.addEventListener('animationend', () => logo.classList.remove('logo-bounce'));
+    }
+
+    // Topbar button click sounds
+    this.#el.querySelectorAll('.db-topbar-btn').forEach(btn => {
+      btn.addEventListener('click', () => sfx.click(), { capture: true });
+    });
 
     const grid = this.#el.querySelector('#project-grid');
 
@@ -154,6 +172,7 @@ export class Dashboard {
 
     card.addEventListener('click', (e) => {
       if (e.target.closest('.project-card-gear-wrap')) return;
+      sfx.suck();
       this.#onOpen(project);
     });
 
@@ -180,7 +199,7 @@ export class Dashboard {
       if ((localStorage.getItem('editorTheme') ?? 'default') === val) opt.selected = true;
       themeSelect.appendChild(opt);
     });
-    themeSelect.addEventListener('change', (e) => { e.stopPropagation(); this.#applyTheme(themeSelect.value); });
+    themeSelect.addEventListener('change', (e) => { e.stopPropagation(); sfx.check(); this.#applyTheme(themeSelect.value); });
     themeSelect.addEventListener('click', (e) => e.stopPropagation());
     themeRow.appendChild(themeSelect);
     dropdown.appendChild(themeRow);
@@ -207,7 +226,12 @@ export class Dashboard {
     const exitItem = document.createElement('div');
     exitItem.className = 'topbar-dropdown-item danger';
     exitItem.textContent = 'Exit';
-    exitItem.addEventListener('click', (e) => { e.stopPropagation(); window.close(); });
+    exitItem.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      dropdown.classList.remove('open');
+      const ok = await showConfirm('Exit', 'Close the application?', 'Exit');
+      if (ok) { sfx.out(); window.close(); }
+    });
     dropdown.appendChild(exitItem);
 
     btn.appendChild(dropdown);
@@ -261,6 +285,7 @@ export class Dashboard {
     const name = await showModal('New Project', 'Project name:', 'My Project');
     if (!name) return;
     const project = this.#projectManager.createProject(name);
+    sfx.check();
     showToast(`Project "${project.name}" created`, 'success');
     this.#render();
   }
@@ -271,6 +296,7 @@ export class Dashboard {
     const name = await showModal('Rename Project', 'New name:', project.name);
     if (!name) return;
     this.#projectManager.renameProject(id, name);
+    sfx.check();
     this.#render();
   }
 
@@ -279,6 +305,7 @@ export class Dashboard {
     if (!project) return;
     if (!confirm(`Delete project "${project.name}"? This cannot be undone.`)) return;
     this.#projectManager.deleteProject(id);
+    sfx.out();
     showToast('Project deleted');
     this.#render();
   }
@@ -308,6 +335,7 @@ export class Dashboard {
       try {
         const text = await file.text();
         const project = this.#projectManager.importProject(text);
+        sfx.check();
         showToast(`Imported: ${project.name}`, 'success');
         this.#render();
       } catch (e) {

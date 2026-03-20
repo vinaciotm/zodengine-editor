@@ -400,7 +400,7 @@ body {
     object-fit: contain;
     flex-shrink: 0;
     display: block;
-    pointer-events: none;
+    pointer-events: auto;
     user-select: none;
     margin-left: 20px;
     margin-right: 10px;
@@ -408,6 +408,18 @@ body {
     box-shadow:
         0 2px 8px rgba(0, 0, 0, 0.6),
         0 0 0 1px rgba(255, 255, 255, 0.08);
+    transition: transform 0.1s;
+}
+@keyframes logoBounce {
+    0%   { transform: scale(1) rotate(0deg); }
+    20%  { transform: scale(1.3) rotate(-10deg); }
+    45%  { transform: scale(0.88) rotate(6deg); }
+    65%  { transform: scale(1.12) rotate(-4deg); }
+    80%  { transform: scale(0.96) rotate(2deg); }
+    100% { transform: scale(1) rotate(0deg); }
+}
+.topbar-brand-logo.logo-bounce {
+    animation: logoBounce 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 .topbar-center {
     position: absolute;
@@ -621,6 +633,8 @@ body {
     letter-spacing: 0.5px;
     gap: 4px;
     cursor: default;
+    position: relative;
+    overflow: hidden;
 }
 .panel-header-actions {
     display: flex;
@@ -803,6 +817,8 @@ body {
     color: var(--text-bright);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    position: relative;
+    overflow: hidden;
 }
 .inspector-section-header:hover {
     background: var(--bg-hover);
@@ -1199,6 +1215,12 @@ body {
     color: var(--text-bright);
     margin-bottom: 16px;
 }
+.modal-msg {
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
 .modal-input {
     width: 100%;
     background: var(--bg-dark);
@@ -1456,9 +1478,16 @@ body {
     --accent2: #30a0d8;
     --panel-header: #141414;
 }
-[data-theme="default"] .panel-header,
+/* Main panel headers — UE4-style blue */
+[data-theme="default"] .panel-header {
+    background: linear-gradient(90deg, #1d3248 0%, #162639 60%, #111e2c 100%);
+    border-bottom: 1px solid #2a4260;
+    border-left: 2px solid #2d6ca0;
+    color: #c8dff0;
+}
+/* Internal section headers (Transform, Mesh, etc.) — gray */
 [data-theme="default"] .inspector-section-header {
-    background: linear-gradient(180deg, #3a3a3a 0%, #272727 100%);
+    background: linear-gradient(90deg, #333333 0%, #2a2a2a 100%);
     border-bottom-color: #3a3a3a;
 }
 [data-theme="default"] .editor-topbar {
@@ -1567,6 +1596,33 @@ body {
     border-color: #404040;
 }
 
+/* a) Dashboard radial gradient background */
+[data-theme="default"] .dashboard {
+    background: radial-gradient(ellipse at 50% 25%, #1d1d1d 0%, #0d0d0d 55%, #000000 100%);
+}
+
+/* b) Metallic 3D gloss sheen on all headers and bars */
+[data-theme="default"] .panel-header::after,
+[data-theme="default"] .inspector-section-header::after,
+[data-theme="default"] .editor-topbar::after,
+[data-theme="default"] .db-topbar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 85% 160% at 50% -10%,
+            rgba(255,255,255,0.52) 0%,
+            rgba(220,220,220,0.12) 38%,
+            transparent 65%
+        ),
+        linear-gradient(180deg,
+            rgba(255,255,255,0.04) 0%,
+            transparent 45%,
+            rgba(0,0,0,0.28) 100%
+        );
+    pointer-events: none;
+}
+
 /* ===================== GLOBAL TRANSITIONS ===================== */
 .panel-header,
 .btn-icon,
@@ -1639,4 +1695,13 @@ body {
 .project-card,
 .project-new-card {
     animation: cardFadeIn 0.3s ease both;
+}
+
+/* Panel content slide-in (CENARIOS, OBJETOS, DETALHES, ASSETS) */
+@keyframes panelSlideOpen {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.panel-content-opening {
+    animation: panelSlideOpen 0.2s ease both;
 }

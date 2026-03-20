@@ -1,4 +1,5 @@
 import { showNewSceneModal, makeCollapsiblePanel } from './utils.js';
+import { sfx } from './sfx.js';
 
 export class ScenesPanel {
   #el = null;
@@ -29,12 +30,13 @@ export class ScenesPanel {
     this.#listEl.id = 'scenes-list';
     this.#el.appendChild(this.#listEl);
 
-    makeCollapsiblePanel(header, this.#listEl, true);
+    makeCollapsiblePanel(header, this.#listEl, true, open => open ? sfx.in() : sfx.out());
 
     header.querySelector('#scene-add').addEventListener('click', async () => {
       const result = await showNewSceneModal();
       if (!result) return;
       const idx = this.#editor.addScene(result.name, result.copy);
+      sfx.in();
       this.#editor.switchScene(idx);
     });
 
@@ -74,10 +76,11 @@ export class ScenesPanel {
       item.addEventListener('click', (e) => {
         if (e.target.classList.contains('scene-item-del')) {
           if (!confirm(`Delete scene "${scene.name}"?`)) return;
+          sfx.out();
           this.#editor.deleteScene(idx);
           return;
         }
-        if (idx !== active) this.#editor.switchScene(idx);
+        if (idx !== active) { sfx.in(); this.#editor.switchScene(idx); }
       });
       list.appendChild(item);
     });

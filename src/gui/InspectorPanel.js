@@ -1,4 +1,5 @@
 import { numInput, dragNum, colorToHex, hexToNum, makeCollapsiblePanel } from './utils.js';
+import { sfx } from './sfx.js';
 import { TagComponent } from '../components/TagComponent.js';
 import { TransformComponent } from '../components/TransformComponent.js';
 import { MeshComponent } from '../components/MeshComponent.js';
@@ -34,7 +35,7 @@ export class InspectorPanel {
     this.#contentEl.id = 'insp-content';
     this.#el.appendChild(this.#contentEl);
 
-    makeCollapsiblePanel(header, this.#contentEl, true);
+    makeCollapsiblePanel(header, this.#contentEl, true, open => open ? sfx.in() : sfx.out());
 
     this.#render();
     this.#unsubs.push(

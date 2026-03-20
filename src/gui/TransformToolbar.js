@@ -1,3 +1,5 @@
+import { sfx } from './sfx.js';
+
 export class TransformToolbar {
   #el = null;
   #editor = null;
@@ -27,15 +29,15 @@ export class TransformToolbar {
     this.#keyHandler = (e) => {
       const tag = e.target.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-      if (e.key === '1') this.#editor.setTransformMode('translate');
-      else if (e.key === '2') this.#editor.setTransformMode('rotate');
+      if (e.key === '1') { sfx.click(); this.#editor.setTransformMode('translate'); }
+      else if (e.key === '2') { sfx.click(); this.#editor.setTransformMode('rotate'); }
       else if (e.key === '3') {
         const id = this.#editor.selectedEntityId;
-        if (!this.#editor.isScaleLocked(id)) this.#editor.setTransformMode('scale');
+        if (!this.#editor.isScaleLocked(id)) { sfx.click(); this.#editor.setTransformMode('scale'); }
       }
-      else if (e.key === '4') this.#editor.setViewMode('default');
-      else if (e.key === '5') this.#editor.setViewMode('unlit');
-      else if (e.key === '6') this.#editor.setViewMode('wireframe');
+      else if (e.key === '4') { sfx.click(); this.#editor.setViewMode('default'); }
+      else if (e.key === '5') { sfx.click(); this.#editor.setViewMode('unlit'); }
+      else if (e.key === '6') { sfx.click(); this.#editor.setViewMode('wireframe'); }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (this.#editor.selectedEntityId !== null) {
           this.#editor.deleteEntity(this.#editor.selectedEntityId);
@@ -114,6 +116,7 @@ export class TransformToolbar {
 
     this.#el.querySelectorAll('[data-action]').forEach(b => {
       b.addEventListener('click', () => {
+        sfx.click();
         const a = b.dataset.action;
         if (a === 'translate' || a === 'rotate' || a === 'scale') {
           if (a === 'scale' && scaleLocked) return;

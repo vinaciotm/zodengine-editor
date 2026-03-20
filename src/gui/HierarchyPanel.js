@@ -1,4 +1,5 @@
 import { makeCollapsiblePanel } from './utils.js';
+import { sfx } from './sfx.js';
 import { TagComponent } from '../components/TagComponent.js';
 import { MeshComponent } from '../components/MeshComponent.js';
 import { LightComponent } from '../components/LightComponent.js';
@@ -34,7 +35,7 @@ export class HierarchyPanel {
     this.#contentEl.id = 'hier-content';
     this.#el.appendChild(this.#contentEl);
 
-    makeCollapsiblePanel(header, this.#contentEl, true);
+    makeCollapsiblePanel(header, this.#contentEl, true, open => open ? sfx.in() : sfx.out());
 
     this.#render();
     this.#unsubs.push(

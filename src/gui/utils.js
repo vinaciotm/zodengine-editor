@@ -129,7 +129,7 @@ export function hexToNum(hex) {
   return parseInt(hex.replace('#', ''), 16);
 }
 
-export function makeCollapsiblePanel(headerEl, contentEl, initialOpen = true) {
+export function makeCollapsiblePanel(headerEl, contentEl, initialOpen = true, onToggle = null) {
   let open = initialOpen;
   // Find the parent panel element to manage its flex
   const panelEl = headerEl.parentElement;
@@ -151,8 +151,41 @@ export function makeCollapsiblePanel(headerEl, contentEl, initialOpen = true) {
     // Don't collapse when clicking action buttons
     if (e.target.closest('.panel-header-actions')) return;
     open = !open;
-    contentEl.style.display = open ? '' : 'none';
     chevron.innerHTML = open ? '&#9660;' : '&#9654;';
-    if (panelEl) panelEl.style.flex = open ? savedFlex : '0 0 auto';
+    if (open) {
+      contentEl.style.display = '';
+      if (panelEl) panelEl.style.flex = savedFlex;
+      contentEl.classList.remove('panel-content-opening');
+      // Trigger slide-in animation
+      requestAnimationFrame(() => contentEl.classList.add('panel-content-opening'));
+      contentEl.addEventListener('animationend', () => contentEl.classList.remove('panel-content-opening'), { once: true });
+    } else {
+      contentEl.style.display = 'none';
+      if (panelEl) panelEl.style.flex = '0 0 auto';
+    }
+    onToggle?.(open);
+  });
+}
+
+export function showConfirm(title, message, confirmLabel = 'Confirm') {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal">
+        <h2>${title}</h2>
+        <p class="modal-msg">${message}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+          <button class="btn btn-danger" id="modal-ok">${confirmLabel}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const finish = (val) => { overlay.remove(); resolve(val); };
+    overlay.querySelector('#modal-ok').addEventListener('click', () => finish(true));
+    overlay.querySelector('#modal-cancel').addEventListener('click', () => finish(false));
+    overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') finish(false); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(false); });
   });
 }

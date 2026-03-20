@@ -1,3 +1,5 @@
+import { sfx } from './sfx.js';
+
 export class PrefabsPanel {
   #el = null;
   #editor = null;
@@ -102,6 +104,7 @@ export class PrefabsPanel {
       bodyEl.style.display = open ? '' : 'none';
       const footer = this.#el.closest('.editor-footer');
       if (footer) footer.style.height = open ? OPEN_H + 'px' : CLOSED_H + 'px';
+      open ? sfx.in() : sfx.out();
     });
 
     const grid = this.#el.querySelector('#assets-grid');
@@ -116,7 +119,7 @@ export class PrefabsPanel {
         btn.innerHTML = `<span class="asset-icon">${item.icon}</span><span class="asset-label">${item.label}</span>`;
         btn.addEventListener('click', () => {
           const id = spawnMap[item.spawn]?.();
-          if (id !== undefined) this.#editor.selectEntity(id);
+          if (id !== undefined) { sfx.in(); this.#editor.selectEntity(id); }
         });
         grid.appendChild(btn);
       }

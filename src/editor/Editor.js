@@ -1,19 +1,26 @@
-import * as THREE from 'three/webgpu';
-import { CommandManager, SpawnCommand, DeleteCommand, RenameCommand, TransformCommand } from './CommandManager.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { TransformControls } from 'three/addons/controls/TransformControls.js';
-import { World } from '../ecs/World.js';
-import { RenderSystem } from '../systems/RenderSystem.js';
-import { TagComponent } from '../components/TagComponent.js';
-import { TransformComponent } from '../components/TransformComponent.js';
-import { MeshComponent } from '../components/MeshComponent.js';
-import { LightComponent } from '../components/LightComponent.js';
-import { TriggerComponent } from '../components/TriggerComponent.js';
-import { PlayerStartComponent } from '../components/PlayerStartComponent.js';
-import { GroupComponent } from '../components/GroupComponent.js';
-import { ParentComponent } from '../components/ParentComponent.js';
-import { CameraComponent } from '../components/CameraComponent.js';
-import { FogComponent } from '../components/FogComponent.js';
+import * as THREE from "three/webgpu";
+import { sfx } from '../gui/sfx.js';
+import {
+  CommandManager,
+  SpawnCommand,
+  DeleteCommand,
+  RenameCommand,
+  TransformCommand,
+} from "./CommandManager.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TransformControls } from "three/addons/controls/TransformControls.js";
+import { World } from "../ecs/World.js";
+import { RenderSystem } from "../systems/RenderSystem.js";
+import { TagComponent } from "../components/TagComponent.js";
+import { TransformComponent } from "../components/TransformComponent.js";
+import { MeshComponent } from "../components/MeshComponent.js";
+import { LightComponent } from "../components/LightComponent.js";
+import { TriggerComponent } from "../components/TriggerComponent.js";
+import { PlayerStartComponent } from "../components/PlayerStartComponent.js";
+import { GroupComponent } from "../components/GroupComponent.js";
+import { ParentComponent } from "../components/ParentComponent.js";
+import { CameraComponent } from "../components/CameraComponent.js";
+import { FogComponent } from "../components/FogComponent.js";
 
 const COMPONENT_REGISTRY = {
   TagComponent,
@@ -44,11 +51,11 @@ export class Editor {
 
   selectedEntityId = null;
   selectedEntityIds = new Set();
-  transformMode = 'translate';
+  transformMode = "translate";
   project = null;
   commandManager = new CommandManager();
 
-  #viewMode = 'default';
+  #viewMode = "default";
   #helpers = new Map();
   #transformBefore = null;
   #clipboard = null;
@@ -64,7 +71,9 @@ export class Editor {
     this.project = project;
   }
 
-  get viewMode() { return this.#viewMode; }
+  get viewMode() {
+    return this.#viewMode;
+  }
 
   async init(container) {
     this.container = container;
@@ -72,11 +81,19 @@ export class Editor {
     this.threeScene = new THREE.Scene();
     this.threeScene.background = new THREE.Color(0x1a1a1a);
 
-    this.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+    this.camera = new THREE.PerspectiveCamera(
+      60,
+      container.clientWidth / container.clientHeight,
+      0.1,
+      1000,
+    );
     this.camera.position.set(5, 5, 8);
     this.camera.lookAt(0, 0, 0);
 
-    this.renderer = new THREE.WebGPURenderer({ antialias: true, preserveDrawingBuffer: true });
+    this.renderer = new THREE.WebGPURenderer({
+      antialias: true,
+      preserveDrawingBuffer: true,
+    });
     await this.renderer.init();
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -87,38 +104,57 @@ export class Editor {
     const grid = new THREE.GridHelper(20, 20, 0x444444, 0x2a2a2a);
     this.threeScene.add(grid);
 
-    this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.orbitControls = new OrbitControls(
+      this.camera,
+      this.renderer.domElement,
+    );
     this.orbitControls.enableDamping = false;
 
-    this.transformControls = new TransformControls(this.camera, this.renderer.domElement);
+    this.transformControls = new TransformControls(
+      this.camera,
+      this.renderer.domElement,
+    );
     this.transformControls.setMode(this.transformMode);
     this.threeScene.add(this.transformControls.getHelper());
 
-    this.transformControls.addEventListener('dragging-changed', (e) => {
+    this.transformControls.addEventListener("dragging-changed", (e) => {
       this.orbitControls.enabled = !e.value;
       if (e.value) {
         this.#transformBefore = this.#captureTransform(this.selectedEntityId);
       } else {
         if (this.#transformBefore !== null && this.selectedEntityId !== null) {
           const after = this.#captureTransform(this.selectedEntityId);
-          this.commandManager.push(new TransformCommand(this, this.selectedEntityId, this.#transformBefore, after));
+          this.commandManager.push(
+            new TransformCommand(
+              this,
+              this.selectedEntityId,
+              this.#transformBefore,
+              after,
+            ),
+          );
           this.#transformBefore = null;
         }
       }
     });
 
-    this.transformControls.addEventListener('objectChange', () => {
+    this.transformControls.addEventListener("objectChange", () => {
       if (this.selectedEntityId === null) return;
       const obj = this.renderSystem.getObject3D(this.selectedEntityId);
       if (!obj) return;
-      const tc = this.world.getComponent(this.selectedEntityId, TransformComponent);
+      const tc = this.world.getComponent(
+        this.selectedEntityId,
+        TransformComponent,
+      );
       if (tc) {
         tc.position.copy(obj.position);
         tc.rotation.copy(obj.rotation);
         tc.scale.copy(obj.scale);
-        this.emit('entity:changed', this.selectedEntityId);
+        this.emit("entity:changed", this.selectedEntityId);
       }
-      const camComp = this.world.getComponent(this.selectedEntityId, CameraComponent);
+      const camComp = this.world.getComponent(
+        this.selectedEntityId,
+        CameraComponent,
+      );
       if (camComp) this.#syncCameraRef(this.selectedEntityId, obj, camComp);
     });
 
@@ -129,27 +165,41 @@ export class Editor {
 
     this.#loadCurrentScene();
 
-    this.renderer.domElement.addEventListener('pointerdown', this.#onPointerDown);
+    this.renderer.domElement.addEventListener(
+      "pointerdown",
+      this.#onPointerDown,
+    );
 
     this.#resizeObserver = new ResizeObserver(() => this.#onResize());
     this.#resizeObserver.observe(container);
 
     // Camera preview overlay (border + label, drawn on top of canvas)
-    this.#cameraPreviewOverlay = document.createElement('div');
+    this.#cameraPreviewOverlay = document.createElement("div");
     this.#cameraPreviewOverlay.style.cssText = [
-      'position:absolute', 'bottom:8px', 'right:8px',
-      'width:240px', 'height:135px',
-      'border:2px solid rgba(100,160,255,0.75)',
-      'border-radius:4px', 'pointer-events:none',
-      'display:none', 'z-index:10', 'box-sizing:border-box',
-    ].join(';');
-    const previewLabel = document.createElement('div');
+      "position:absolute",
+      "bottom:8px",
+      "right:8px",
+      "width:240px",
+      "height:135px",
+      "border:2px solid rgba(100,160,255,0.75)",
+      "border-radius:4px",
+      "pointer-events:none",
+      "display:none",
+      "z-index:10",
+      "box-sizing:border-box",
+    ].join(";");
+    const previewLabel = document.createElement("div");
     previewLabel.style.cssText = [
-      'position:absolute', 'top:4px', 'left:6px',
-      'color:rgba(100,180,255,0.9)', 'font-family:system-ui',
-      'font-size:10px', 'letter-spacing:0.3px', 'pointer-events:none',
-    ].join(';');
-    previewLabel.textContent = 'Camera Preview';
+      "position:absolute",
+      "top:4px",
+      "left:6px",
+      "color:rgba(100,180,255,0.9)",
+      "font-family:system-ui",
+      "font-size:10px",
+      "letter-spacing:0.3px",
+      "pointer-events:none",
+    ].join(";");
+    previewLabel.textContent = "Camera Preview";
     this.#cameraPreviewOverlay.appendChild(previewLabel);
     container.appendChild(this.#cameraPreviewOverlay);
 
@@ -178,25 +228,26 @@ export class Editor {
     }
 
     if (!camRef) {
-      overlay.style.display = 'none';
+      overlay.style.display = "none";
       return;
     }
 
-    overlay.style.display = 'block';
+    overlay.style.display = "block";
 
     const cw = this.container.clientWidth;
     const ch = this.container.clientHeight;
-    const pw = 240, ph = 135;
+    const pw = 240,
+      ph = 135;
     const px = cw - pw - 8;
     const py = ch - ph - 8;
 
     camRef.aspect = pw / ph;
     camRef.updateProjectionMatrix();
 
-    // Temporarily hide editor icons and helpers for a clean preview
+    // Temporarily hide all editor-only indicators (sprites, rings, line groups, etc.)
     const hiddenIcons = [];
-    this.threeScene.traverse(child => {
-      if ((child.isSprite || child.isMesh) && child.userData.isEditorIcon) {
+    this.threeScene.traverse((child) => {
+      if (child.userData.isEditorIcon) {
         hiddenIcons.push(child);
         child.visible = false;
       }
@@ -236,7 +287,7 @@ export class Editor {
   setViewMode(mode) {
     this.#viewMode = mode;
     for (const [, obj] of this.renderSystem.entityObjects) {
-      obj.traverse(child => {
+      obj.traverse((child) => {
         if (!child.isMesh || child.userData.isEditorIcon) return;
         if (child.userData._origMat) {
           child.material = child.userData._origMat;
@@ -244,7 +295,7 @@ export class Editor {
         }
       });
     }
-    if (mode !== 'default') {
+    if (mode !== "default") {
       for (const [, obj] of this.renderSystem.entityObjects) {
         this.#applyViewModeToObject(obj, mode);
       }
@@ -252,16 +303,19 @@ export class Editor {
     } else {
       this.renderSystem.setLightingEnabled(true);
     }
-    this.emit('viewMode:changed', mode);
+    this.emit("viewMode:changed", mode);
   }
 
   #applyViewModeToObject(obj, mode) {
-    obj.traverse(child => {
+    obj.traverse((child) => {
       if (!child.isMesh || child.userData.isEditorIcon) return;
       if (!child.userData._origMat) child.userData._origMat = child.material;
       const color = child.userData._origMat.color;
-      if (mode === 'wireframe') {
-        child.material = new THREE.MeshBasicMaterial({ color, wireframe: true });
+      if (mode === "wireframe") {
+        child.material = new THREE.MeshBasicMaterial({
+          color,
+          wireframe: true,
+        });
       } else {
         child.material = new THREE.MeshBasicMaterial({ color });
       }
@@ -303,7 +357,7 @@ export class Editor {
       const opacity = isSelected ? 1.0 : 0.5;
       for (const child of obj.children) {
         if (!child.userData.isEditorIcon) continue;
-        child.traverse(node => {
+        child.traverse((node) => {
           if (node.material) node.material.opacity = opacity;
         });
       }
@@ -340,14 +394,17 @@ export class Editor {
 
     const selectables = [];
     for (const [, obj] of this.renderSystem.entityObjects) {
-      obj.traverse(child => { if (child.isMesh || child.isSprite) selectables.push(child); });
+      obj.traverse((child) => {
+        if (child.isMesh || child.isSprite) selectables.push(child);
+      });
     }
 
     const hits = raycaster.intersectObjects(selectables, false);
     if (hits.length === 0) return null;
 
     let hitObj = hits[0].object;
-    while (hitObj && hitObj.userData.entityId === undefined) hitObj = hitObj.parent;
+    while (hitObj && hitObj.userData.entityId === undefined)
+      hitObj = hitObj.parent;
     return hitObj?.userData.entityId ?? null;
   }
 
@@ -375,8 +432,12 @@ export class Editor {
       } else {
         this.transformControls.detach();
       }
-      this.emit('entity:selected', this.selectedEntityId);
-      this.emit('selection:changed', this.selectedEntityIds, this.selectedEntityId);
+      this.emit("entity:selected", this.selectedEntityId);
+      this.emit(
+        "selection:changed",
+        this.selectedEntityIds,
+        this.selectedEntityId,
+      );
     } else {
       this.selectEntity(entityId);
     }
@@ -394,8 +455,8 @@ export class Editor {
       if (obj) this.transformControls.attach(obj);
     }
 
-    this.emit('entity:selected', entityId);
-    this.emit('selection:changed', this.selectedEntityIds, entityId);
+    this.emit("entity:selected", entityId);
+    this.emit("selection:changed", this.selectedEntityIds, entityId);
     this.#updateDebugOpacities();
   }
 
@@ -403,15 +464,15 @@ export class Editor {
     this.selectedEntityId = null;
     this.selectedEntityIds.clear();
     this.transformControls.detach();
-    this.emit('entity:selected', null);
-    this.emit('selection:changed', this.selectedEntityIds, null);
+    this.emit("entity:selected", null);
+    this.emit("selection:changed", this.selectedEntityIds, null);
     this.#updateDebugOpacities();
   }
 
   setTransformMode(mode) {
     this.transformMode = mode;
     this.transformControls.setMode(mode);
-    this.emit('transformMode:changed', mode);
+    this.emit("transformMode:changed", mode);
   }
 
   // --- Grouping ---
@@ -428,7 +489,7 @@ export class Editor {
     centroid.divideScalar(ids.length);
 
     const groupId = this.world.createEntity();
-    this.world.addComponent(groupId, new TagComponent('Group'));
+    this.world.addComponent(groupId, new TagComponent("Group"));
     const groupTransform = new TransformComponent();
     groupTransform.position.copy(centroid);
     this.world.addComponent(groupId, groupTransform);
@@ -450,17 +511,20 @@ export class Editor {
     }
 
     this.selectEntity(groupId);
-    this.emit('hierarchy:changed');
+    this.emit("hierarchy:changed");
   }
 
   ungroupEntity(groupEntityId) {
     const groupComp = this.world.getComponent(groupEntityId, GroupComponent);
     if (!groupComp) return;
 
-    const groupTransform = this.world.getComponent(groupEntityId, TransformComponent);
+    const groupTransform = this.world.getComponent(
+      groupEntityId,
+      TransformComponent,
+    );
     const groupPos = groupTransform?.position ?? new THREE.Vector3();
 
-    const children = this.world.entities.filter(id => {
+    const children = this.world.entities.filter((id) => {
       const p = this.world.getComponent(id, ParentComponent);
       return p?.parentId === groupEntityId;
     });
@@ -479,7 +543,7 @@ export class Editor {
     }
 
     this.deleteEntity(groupEntityId);
-    this.emit('hierarchy:changed');
+    this.emit("hierarchy:changed");
   }
 
   // --- Prefab factories ---
@@ -487,7 +551,8 @@ export class Editor {
   spawnEntity(name, setupFn) {
     const id = this.#spawnEntityRaw(name, setupFn);
     this.commandManager.push(new SpawnCommand(this, id));
-    this.emit('hierarchy:changed');
+    sfx.spawn();
+    this.emit("hierarchy:changed");
     return id;
   }
 
@@ -500,12 +565,20 @@ export class Editor {
       if (Class) this.world.addComponent(newId, Class.deserialize(data));
     }
     const tag = this.world.getComponent(newId, TagComponent);
-    if (tag) tag.name = tag.name + ' Copy';
-    const t = this.world.getComponent(newId, TransformComponent);
-    if (t) { t.position.x += 0.5; t.position.z += 0.5; }
-    this.renderSystem.createObjectForEntity(newId);
+    if (tag) tag.name = tag.name + " Copy";
+    // Only offset non-light entities — lights stay at same position as origin
+    if (!this.world.hasComponent(newId, LightComponent)) {
+      const t = this.world.getComponent(newId, TransformComponent);
+      if (t) { t.position.x += 0.5; t.position.z += 0.5; }
+    }
+    const newObj = this.renderSystem.createObjectForEntity(newId);
+    // Ensure all editor icons on the new entity are visible (safety reset)
+    newObj?.traverse(child => { if (child.userData.isEditorIcon) child.visible = true; });
+    if (this.#viewMode !== 'default') {
+      if (newObj) this.#applyViewModeToObject(newObj, this.#viewMode);
+    }
     this.commandManager.push(new SpawnCommand(this, newId));
-    this.emit('hierarchy:changed');
+    this.emit("hierarchy:changed");
     this.selectEntity(newId);
     return newId;
   }
@@ -513,11 +586,11 @@ export class Editor {
   copyEntity() {
     const id = this.selectedEntityId;
     if (id === null) return;
-    this.#clipboard = { type: 'entity', snap: this.world.snapshotEntity(id) };
+    this.#clipboard = { type: "entity", snap: this.world.snapshotEntity(id) };
   }
 
   pasteEntity() {
-    if (!this.#clipboard || this.#clipboard.type !== 'entity') return;
+    if (!this.#clipboard || this.#clipboard.type !== "entity") return;
     const snap = this.#clipboard.snap;
     const newId = this.world.createEntity();
     for (const [name, data] of Object.entries(snap.components)) {
@@ -525,12 +598,20 @@ export class Editor {
       if (Class) this.world.addComponent(newId, Class.deserialize(data));
     }
     const tag = this.world.getComponent(newId, TagComponent);
-    if (tag) tag.name = tag.name + ' Copy';
-    const t = this.world.getComponent(newId, TransformComponent);
-    if (t) { t.position.x += 0.5; t.position.z += 0.5; }
-    this.renderSystem.createObjectForEntity(newId);
+    if (tag) tag.name = tag.name + " Copy";
+    // Only offset non-light entities — lights stay at same position as origin
+    if (!this.world.hasComponent(newId, LightComponent)) {
+      const t = this.world.getComponent(newId, TransformComponent);
+      if (t) { t.position.x += 0.5; t.position.z += 0.5; }
+    }
+    const pastedObj = this.renderSystem.createObjectForEntity(newId);
+    // Ensure all editor icons on the new entity are visible (safety reset)
+    pastedObj?.traverse(child => { if (child.userData.isEditorIcon) child.visible = true; });
+    if (this.#viewMode !== 'default') {
+      if (pastedObj) this.#applyViewModeToObject(pastedObj, this.#viewMode);
+    }
     this.commandManager.push(new SpawnCommand(this, newId));
-    this.emit('hierarchy:changed');
+    this.emit("hierarchy:changed");
     this.selectEntity(newId);
   }
 
@@ -540,7 +621,7 @@ export class Editor {
     this.world.addComponent(id, new TransformComponent());
     setupFn?.(id);
     this.renderSystem.createObjectForEntity(id);
-    if (this.#viewMode !== 'default') {
+    if (this.#viewMode !== "default") {
       const obj = this.renderSystem.getObject3D(id);
       if (obj) this.#applyViewModeToObject(obj, this.#viewMode);
     }
@@ -551,20 +632,25 @@ export class Editor {
   restoreEntitySilent(snapshot) {
     this.world.restoreEntity(snapshot, COMPONENT_REGISTRY);
     this.renderSystem.createObjectForEntity(snapshot.id);
-    if (this.#viewMode !== 'default') {
+    if (this.#viewMode !== "default") {
       const obj = this.renderSystem.getObject3D(snapshot.id);
       if (obj) this.#applyViewModeToObject(obj, this.#viewMode);
     }
-    this.emit('hierarchy:changed');
+    this.emit("hierarchy:changed");
   }
 
   // Silently delete an entity (for undo/redo — no new command pushed)
-  deleteEntitySilent(entityId) { this.#deleteEntityRaw(entityId); }
+  deleteEntitySilent(entityId) {
+    this.#deleteEntityRaw(entityId);
+  }
 
   // Silently rename (for undo/redo)
   renameEntitySilent(entityId, name) {
     const tag = this.world.getComponent(entityId, TagComponent);
-    if (tag) { tag.name = name; this.emit('hierarchy:changed'); }
+    if (tag) {
+      tag.name = name;
+      this.emit("hierarchy:changed");
+    }
   }
 
   // Capture/apply transform snapshots for undo/redo
@@ -586,40 +672,105 @@ export class Editor {
     tc.rotation.copy(snap.rotation);
     tc.scale.copy(snap.scale);
     const obj = this.renderSystem.getObject3D(entityId);
-    if (obj) { obj.position.copy(tc.position); obj.rotation.copy(tc.rotation); obj.scale.copy(tc.scale); }
+    if (obj) {
+      obj.position.copy(tc.position);
+      obj.rotation.copy(tc.rotation);
+      obj.scale.copy(tc.scale);
+    }
     if (this.selectedEntityId === entityId) {
       const obj2 = this.renderSystem.getObject3D(entityId);
       if (obj2) this.transformControls.attach(obj2);
     }
-    this.emit('entity:changed', entityId);
+    this.emit("entity:changed", entityId);
   }
 
-  spawnCube() { return this.spawnEntity('Cube', id => this.world.addComponent(id, new MeshComponent('box', 0x4a9eff))); }
-  spawnSphere() { return this.spawnEntity('Sphere', id => this.world.addComponent(id, new MeshComponent('sphere', 0xff6b4a))); }
-  spawnCone() { return this.spawnEntity('Cone', id => this.world.addComponent(id, new MeshComponent('cone', 0x4aff6b))); }
-  spawnCylinder() { return this.spawnEntity('Cylinder', id => this.world.addComponent(id, new MeshComponent('cylinder', 0xffcc4a))); }
-  spawnCapsule() { return this.spawnEntity('Capsule', id => this.world.addComponent(id, new MeshComponent('capsule', 0xcc4aff))); }
-  spawnPlane() { return this.spawnEntity('Plane', id => this.world.addComponent(id, new MeshComponent('plane', 0x888888))); }
+  spawnCube() {
+    return this.spawnEntity("Cube", (id) =>
+      this.world.addComponent(id, new MeshComponent("box", 0x4a9eff)),
+    );
+  }
+  spawnSphere() {
+    return this.spawnEntity("Sphere", (id) =>
+      this.world.addComponent(id, new MeshComponent("sphere", 0xff6b4a)),
+    );
+  }
+  spawnCone() {
+    return this.spawnEntity("Cone", (id) =>
+      this.world.addComponent(id, new MeshComponent("cone", 0x4aff6b)),
+    );
+  }
+  spawnCylinder() {
+    return this.spawnEntity("Cylinder", (id) =>
+      this.world.addComponent(id, new MeshComponent("cylinder", 0xffcc4a)),
+    );
+  }
+  spawnCapsule() {
+    return this.spawnEntity("Capsule", (id) =>
+      this.world.addComponent(id, new MeshComponent("capsule", 0xcc4aff)),
+    );
+  }
+  spawnPlane() {
+    return this.spawnEntity("Plane", (id) =>
+      this.world.addComponent(id, new MeshComponent("plane", 0x888888)),
+    );
+  }
   // Use higher default intensities so lights are visible in physical rendering mode
-  spawnPointLight() { return this.spawnEntity('PointLight', id => this.world.addComponent(id, new LightComponent('point', 0xffffff, 1, 1))); }
-  spawnDirectionalLight() { return this.spawnEntity('DirectionalLight', id => this.world.addComponent(id, new LightComponent('directional', 0xffffff, 1))); }
-  spawnSpotLight() { return this.spawnEntity('SpotLight', id => this.world.addComponent(id, new LightComponent('spot', 0xffffff, 1, 1))); }
-  spawnSphereTrigger() { return this.spawnEntity('SphereTrigger', id => this.world.addComponent(id, new TriggerComponent('sphere', 1))); }
-  spawnBoxTrigger() { return this.spawnEntity('BoxTrigger', id => this.world.addComponent(id, new TriggerComponent('box', 1))); }
-  spawnPlayerStart() { return this.spawnEntity('PlayerStart', id => this.world.addComponent(id, new PlayerStartComponent())); }
+  spawnPointLight() {
+    return this.spawnEntity("PointLight", (id) =>
+      this.world.addComponent(id, new LightComponent("point", 0xffffff, 1, 1)),
+    );
+  }
+  spawnDirectionalLight() {
+    return this.spawnEntity("DirectionalLight", (id) =>
+      this.world.addComponent(
+        id,
+        new LightComponent("directional", 0xffffff, 1),
+      ),
+    );
+  }
+  spawnSpotLight() {
+    return this.spawnEntity("SpotLight", (id) =>
+      this.world.addComponent(id, new LightComponent("spot", 0xffffff, 1, 1)),
+    );
+  }
+  spawnSphereTrigger() {
+    return this.spawnEntity("SphereTrigger", (id) =>
+      this.world.addComponent(id, new TriggerComponent("sphere", 1)),
+    );
+  }
+  spawnBoxTrigger() {
+    return this.spawnEntity("BoxTrigger", (id) =>
+      this.world.addComponent(id, new TriggerComponent("box", 1)),
+    );
+  }
+  spawnPlayerStart() {
+    return this.spawnEntity("PlayerStart", (id) =>
+      this.world.addComponent(id, new PlayerStartComponent()),
+    );
+  }
   spawnCamera() {
-    return this.spawnEntity('Camera', id => {
+    return this.spawnEntity("Camera", (id) => {
       this.world.addComponent(id, new CameraComponent());
     });
   }
-  spawnAmbientLight() { return this.spawnEntity('AmbientLight', id => this.world.addComponent(id, new LightComponent('ambient', 0xffffff, 0.5))); }
-  spawnFog() { return this.spawnEntity('Fog', id => this.world.addComponent(id, new FogComponent(0xaaaaaa, 10, 100))); }
+  spawnAmbientLight() {
+    return this.spawnEntity("AmbientLight", (id) =>
+      this.world.addComponent(id, new LightComponent("ambient", 0xffffff, 0.5)),
+    );
+  }
+  spawnFog() {
+    return this.spawnEntity("Fog", (id) =>
+      this.world.addComponent(id, new FogComponent(0xaaaaaa, 10, 100)),
+    );
+  }
 
   // Returns true for entity types where scale doesn't apply (camera, lights)
   isScaleLocked(entityId) {
     if (entityId === null) return false;
-    return this.world.hasComponent(entityId, CameraComponent) ||
-           this.world.hasComponent(entityId, LightComponent);
+    return (
+      this.world.hasComponent(entityId, CameraComponent) ||
+      this.world.hasComponent(entityId, LightComponent)
+    );
   }
 
   isEntityVisible(entityId) {
@@ -630,15 +781,17 @@ export class Editor {
     const obj = this.renderSystem.getObject3D(entityId);
     if (!obj) return;
     obj.visible = !obj.visible;
-    this.emit('hierarchy:changed');
+    this.emit("hierarchy:changed");
   }
 
   deleteEntity(entityId) {
     // Guard: at least one camera must remain in the scene
     if (this.world.getComponent(entityId, CameraComponent)) {
-      const camCount = this.world.entities.filter(id => this.world.getComponent(id, CameraComponent)).length;
+      const camCount = this.world.entities.filter((id) =>
+        this.world.getComponent(id, CameraComponent),
+      ).length;
       if (camCount <= 1) {
-        this.emit('notification', 'Every scene must have at least one camera.');
+        this.emit("notification", "Every scene must have at least one camera.");
         return;
       }
     }
@@ -651,18 +804,25 @@ export class Editor {
     if (this.selectedEntityId === entityId) this.selectEntity(null);
     this.selectedEntityIds.delete(entityId);
     const helper = this.#helpers.get(entityId);
-    if (helper) { this.threeScene.remove(helper); helper.dispose?.(); this.#helpers.delete(entityId); }
+    if (helper) {
+      this.threeScene.remove(helper);
+      helper.dispose?.();
+      this.#helpers.delete(entityId);
+    }
     const groupComp = this.world.getComponent(entityId, GroupComponent);
     if (groupComp) {
-      const children = this.world.entities.filter(id => {
+      const children = this.world.entities.filter((id) => {
         const p = this.world.getComponent(id, ParentComponent);
         return p?.parentId === entityId;
       });
-      for (const cid of children) { this.renderSystem.removeObjectForEntity(cid); this.world.destroyEntity(cid); }
+      for (const cid of children) {
+        this.renderSystem.removeObjectForEntity(cid);
+        this.world.destroyEntity(cid);
+      }
     }
     this.renderSystem.removeObjectForEntity(entityId);
     this.world.destroyEntity(entityId);
-    this.emit('hierarchy:changed');
+    this.emit("hierarchy:changed");
   }
 
   renameEntity(entityId, name) {
@@ -671,7 +831,7 @@ export class Editor {
     const before = tag.name;
     tag.name = name;
     this.commandManager.push(new RenameCommand(this, entityId, before, name));
-    this.emit('hierarchy:changed');
+    this.emit("hierarchy:changed");
   }
 
   rebuildEntityObject(entityId) {
@@ -693,7 +853,8 @@ export class Editor {
       }
     }
 
-    if (this.#viewMode !== 'default' && obj) this.#applyViewModeToObject(obj, this.#viewMode);
+    if (this.#viewMode !== "default" && obj)
+      this.#applyViewModeToObject(obj, this.#viewMode);
 
     if (this.selectedEntityId === entityId) {
       if (obj) this.transformControls.attach(obj);
@@ -705,12 +866,12 @@ export class Editor {
   updateEntityColor(entityId, color) {
     const obj = this.renderSystem.getObject3D(entityId);
     if (!obj) return;
-    obj.traverse(child => {
+    obj.traverse((child) => {
       if (child.isMesh && child.material && !child.userData.isEditorIcon) {
-        const hex = parseInt(color.replace('#', ''), 16);
+        const hex = parseInt(color.replace("#", ""), 16);
         if (child.userData._origMat) {
           child.userData._origMat.color.set(hex);
-          if (this.#viewMode !== 'default') child.material.color.set(hex);
+          if (this.#viewMode !== "default") child.material.color.set(hex);
         } else {
           child.material.color.set(hex);
         }
@@ -724,7 +885,7 @@ export class Editor {
     const lightComp = this.world.getComponent(entityId, LightComponent);
     if (!lightComp) return;
 
-    if (lightComp.type === 'point' || lightComp.type === 'spot') {
+    if (lightComp.type === "point" || lightComp.type === "spot") {
       // Rebuild to update range visualization (rings for point, cone for spot)
       this.rebuildEntityObject(entityId);
       return;
@@ -749,13 +910,13 @@ export class Editor {
   // --- Scene settings ---
 
   getSceneName() {
-    return this.#currentScene()?.name ?? 'Scene';
+    return this.#currentScene()?.name ?? "Scene";
   }
 
   getSceneBackground() {
     const bg = this.threeScene.background;
-    if (bg && bg.isColor) return '#' + bg.getHexString();
-    return '#1a1a1a';
+    if (bg && bg.isColor) return "#" + bg.getHexString();
+    return "#1a1a1a";
   }
 
   setSceneBackground(hexStr) {
@@ -767,10 +928,12 @@ export class Editor {
   // --- Scene management ---
 
   #ensureSceneHasCamera() {
-    const hasCam = this.world.entities.some(id => this.world.getComponent(id, CameraComponent));
+    const hasCam = this.world.entities.some((id) =>
+      this.world.getComponent(id, CameraComponent),
+    );
     if (!hasCam) {
       const camId = this.world.createEntity();
-      this.world.addComponent(camId, new TagComponent('Camera'));
+      this.world.addComponent(camId, new TagComponent("Camera"));
       const t = new TransformComponent();
       t.position.set(0, 2, 5);
       this.world.addComponent(camId, t);
@@ -778,11 +941,14 @@ export class Editor {
       this.renderSystem.createObjectForEntity(camId);
 
       const lightId = this.world.createEntity();
-      this.world.addComponent(lightId, new TagComponent('Directional Light'));
+      this.world.addComponent(lightId, new TagComponent("Directional Light"));
       const lt = new TransformComponent();
       lt.position.set(3, 6, 4);
       this.world.addComponent(lightId, lt);
-      this.world.addComponent(lightId, new LightComponent('directional', 0xffffff, 1));
+      this.world.addComponent(
+        lightId,
+        new LightComponent("directional", 0xffffff, 1),
+      );
       this.renderSystem.createObjectForEntity(lightId);
     }
   }
@@ -806,13 +972,13 @@ export class Editor {
     // Every scene must have at least one camera
     this.#ensureSceneHasCamera();
     // Re-apply view mode after rebuild
-    if (this.#viewMode !== 'default') {
+    if (this.#viewMode !== "default") {
       for (const [, obj] of this.renderSystem.entityObjects) {
         this.#applyViewModeToObject(obj, this.#viewMode);
       }
     }
     this.selectEntity(null);
-    this.emit('hierarchy:changed');
+    this.emit("hierarchy:changed");
   }
 
   saveCurrentScene() {
@@ -821,15 +987,17 @@ export class Editor {
       scene.worldData = this.world.snapshot();
       scene.background = this.getSceneBackground();
       try {
-        scene.thumbnail = this.renderer.domElement.toDataURL('image/jpeg', 0.4);
-      } catch (e) { /* WebGPU may not support toDataURL in all browsers */ }
-      this.emit('scene:saved');
+        scene.thumbnail = this.renderer.domElement.toDataURL("image/jpeg", 0.4);
+      } catch (e) {
+        /* WebGPU may not support toDataURL in all browsers */
+      }
+      this.emit("scene:saved");
     }
   }
 
   saveProject() {
     this.saveCurrentScene();
-    this.emit('project:saved');
+    this.emit("project:saved");
     return this.project;
   }
 
@@ -838,8 +1006,8 @@ export class Editor {
     this.project.currentSceneIndex = sceneIndex;
     this.#loadCurrentScene();
     this.commandManager.clear();
-    this.emit('scene:switched', sceneIndex);
-    this.emit('scenes:changed');
+    this.emit("scene:switched", sceneIndex);
+    this.emit("scenes:changed");
   }
 
   addScene(name, copyCurrentScene = false) {
@@ -849,7 +1017,7 @@ export class Editor {
       worldData: copyCurrentScene ? this.world.snapshot() : null,
     };
     this.project.scenes.push(newScene);
-    this.emit('scenes:changed');
+    this.emit("scenes:changed");
     return this.project.scenes.length - 1;
   }
 
@@ -860,19 +1028,24 @@ export class Editor {
       this.project.currentSceneIndex = this.project.scenes.length - 1;
     }
     this.#loadCurrentScene();
-    this.emit('scenes:changed');
+    this.emit("scenes:changed");
   }
 
   renameScene(sceneIndex, name) {
     const s = this.project.scenes[sceneIndex];
-    if (s) { s.name = name; this.emit('scenes:changed'); }
+    if (s) {
+      s.name = name;
+      this.emit("scenes:changed");
+    }
   }
 
   #currentScene() {
     return this.project.scenes[this.project.currentSceneIndex] ?? null;
   }
 
-  get currentSceneIndex() { return this.project.currentSceneIndex; }
+  get currentSceneIndex() {
+    return this.project.currentSceneIndex;
+  }
 
   // --- Events ---
 
@@ -882,10 +1055,12 @@ export class Editor {
     return () => this.off(event, fn);
   }
 
-  off(event, fn) { this.#listeners.get(event)?.delete(fn); }
+  off(event, fn) {
+    this.#listeners.get(event)?.delete(fn);
+  }
 
   emit(event, ...args) {
-    this.#listeners.get(event)?.forEach(fn => fn(...args));
+    this.#listeners.get(event)?.forEach((fn) => fn(...args));
   }
 
   // --- Cleanup ---
@@ -894,7 +1069,10 @@ export class Editor {
     cancelAnimationFrame(this.#animFrameId);
     this.#resizeObserver?.disconnect();
     this.#clearHelpers();
-    this.renderer.domElement.removeEventListener('pointerdown', this.#onPointerDown);
+    this.renderer.domElement.removeEventListener(
+      "pointerdown",
+      this.#onPointerDown,
+    );
     this.orbitControls.dispose();
     this.transformControls.dispose();
     this.renderer.dispose();

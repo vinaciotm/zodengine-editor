@@ -1,4 +1,5 @@
-import { showModal, showNewSceneModal, showToast } from './utils.js';
+import { showModal, showNewSceneModal, showToast, showConfirm } from './utils.js';
+import { sfx } from './sfx.js';
 
 export class TopBar {
   #el = null;
@@ -88,6 +89,23 @@ export class TopBar {
     this.#buildProjectMenu();
     this.#buildSceneMenu();
 
+    // Logo bounce + winner sound
+    const logo = this.#el.querySelector('.topbar-brand-logo');
+    if (logo) {
+      logo.style.cursor = 'pointer';
+      logo.addEventListener('click', () => {
+        sfx.win();
+        logo.classList.remove('logo-bounce');
+        requestAnimationFrame(() => logo.classList.add('logo-bounce'));
+      });
+      logo.addEventListener('animationend', () => logo.classList.remove('logo-bounce'));
+    }
+
+    // Menu button click sounds
+    ['tbtn-editor', 'tbtn-project', 'tbtn-scene'].forEach(id => {
+      this.#el.querySelector('#' + id)?.addEventListener('click', () => sfx.click(), { capture: true });
+    });
+
     this.#el.querySelector('#tbtn-play').addEventListener('click', (e) => {
       e.stopPropagation();
       this.#onRuntime?.();
@@ -146,6 +164,7 @@ export class TopBar {
   #applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('editorTheme', theme);
+    sfx.check();
   }
 
   #buildSceneMenu() {
@@ -292,17 +311,21 @@ export class TopBar {
   #save() {
     this.#editor.saveProject();
     this.#projectManager.saveProject(this.#editor.project);
+    sfx.save();
     showToast('Scene saved', 'success');
   }
 
   #saveProject() {
     this.#editor.saveProject();
     this.#projectManager.saveProject(this.#editor.project);
+    sfx.save();
     showToast('Project saved', 'success');
   }
 
-  #exit() {
-    if (!confirm('Exit to dashboard? Unsaved changes will be lost.')) return;
+  async #exit() {
+    const ok = await showConfirm('Exit to Dashboard', 'Unsaved changes will be lost.', 'Exit');
+    if (!ok) return;
+    sfx.out();
     this.#onExit();
   }
 
@@ -310,6 +333,7 @@ export class TopBar {
     const result = await showNewSceneModal();
     if (!result) return;
     const idx = this.#editor.addScene(result.name, result.copy);
+    sfx.check();
     this.#editor.switchScene(idx);
   }
 
@@ -322,10 +346,12 @@ export class TopBar {
     this.#rebuildSceneMenu();
   }
 
-  #deleteScene() {
+  async #deleteScene() {
     const s = this.#editor.project.scenes[this.#editor.currentSceneIndex];
     if (!s) return;
-    if (!confirm(`Delete scene "${s.name}"?`)) return;
+    const ok = await showConfirm('Delete Scene', `Delete "${s.name}"? This cannot be undone.`, 'Delete');
+    if (!ok) return;
+    sfx.out();
     this.#editor.deleteScene(this.#editor.currentSceneIndex);
   }
 
@@ -379,6 +405,21 @@ export class TopBar {
 
   if (sceneData?.worldData) loadScene(sceneData.worldData);
 
+  function makeMeshMat(mc) {
+    const base = { color: mc.color };
+    let mat;
+    switch (mc.materialType ?? 'standard') {
+      case 'phong':   mat = new THREE.MeshPhongMaterial({ ...base, shininess: mc.shininess ?? 30 }); break;
+      case 'lambert': mat = new THREE.MeshLambertMaterial(base); break;
+      case 'basic':   mat = new THREE.MeshBasicMaterial(base); break;
+      case 'toon':    mat = new THREE.MeshToonMaterial(base); break;
+      default:        mat = new THREE.MeshStandardMaterial({ ...base, roughness: mc.roughness ?? 0.5, metalness: mc.metalness ?? 0 });
+    }
+    if ((mc.opacity ?? 1) < 1) { mat.transparent = true; mat.opacity = mc.opacity; }
+    if (mc.wireframe) mat.wireframe = true;
+    return mat;
+  }
+
   function loadScene(worldData) {
     const objs = new Map();
     for (const { id, components: c } of worldData.entities) {
@@ -395,7 +436,7 @@ export class TopBar {
           plane: () => new THREE.PlaneGeometry(1,1),
         };
         const geo = (geoFn[c.MeshComponent.type] ?? geoFn.box)();
-        const mat = new THREE.MeshStandardMaterial({ color: c.MeshComponent.color });
+        const mat = makeMeshMat(c.MeshComponent);
         obj = new THREE.Mesh(geo, mat);
         obj.castShadow = true;
         obj.receiveShadow = true;
