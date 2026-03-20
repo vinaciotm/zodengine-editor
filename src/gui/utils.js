@@ -77,6 +77,50 @@ export function numInput(value, onChange, step = 0.01) {
   return inp;
 }
 
+export function dragNum(value, onChange, step = 0.01) {
+  const decimals = step < 0.1 ? 3 : step < 1 ? 2 : 1;
+  const wrap = document.createElement('div');
+  wrap.className = 'drag-num-wrap';
+
+  const inp = document.createElement('input');
+  inp.type = 'number';
+  inp.className = 'inspector-input';
+  inp.value = Number(value).toFixed(decimals);
+  inp.step = step;
+  inp.addEventListener('change', () => onChange(parseFloat(inp.value) || 0));
+
+  const handle = document.createElement('span');
+  handle.className = 'drag-num-handle';
+  handle.innerHTML = '&#8597;';
+  handle.title = 'Drag up/down to adjust';
+
+  let startY, startVal;
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    startVal = parseFloat(inp.value) || 0;
+    document.body.style.cursor = 'ns-resize';
+
+    const onMove = (ev) => {
+      const dy = startY - ev.clientY;
+      const newVal = startVal + dy * step;
+      inp.value = newVal.toFixed(decimals);
+      onChange(newVal);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  wrap.appendChild(inp);
+  wrap.appendChild(handle);
+  return wrap;
+}
+
 export function colorToHex(num) {
   return '#' + num.toString(16).padStart(6, '0');
 }

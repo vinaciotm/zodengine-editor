@@ -51,6 +51,7 @@ export class Editor {
   #viewMode = 'default';
   #helpers = new Map();
   #transformBefore = null;
+  #clipboard = null;
 
   #listeners = new Map();
   container = null;
@@ -488,6 +489,49 @@ export class Editor {
     this.commandManager.push(new SpawnCommand(this, id));
     this.emit('hierarchy:changed');
     return id;
+  }
+
+  duplicateEntity(id) {
+    if (id === null || id === undefined) return;
+    const snap = this.world.snapshotEntity(id);
+    const newId = this.world.createEntity();
+    for (const [name, data] of Object.entries(snap.components)) {
+      const Class = COMPONENT_REGISTRY[name];
+      if (Class) this.world.addComponent(newId, Class.deserialize(data));
+    }
+    const tag = this.world.getComponent(newId, TagComponent);
+    if (tag) tag.name = tag.name + ' Copy';
+    const t = this.world.getComponent(newId, TransformComponent);
+    if (t) { t.position.x += 0.5; t.position.z += 0.5; }
+    this.renderSystem.createObjectForEntity(newId);
+    this.commandManager.push(new SpawnCommand(this, newId));
+    this.emit('hierarchy:changed');
+    this.selectEntity(newId);
+    return newId;
+  }
+
+  copyEntity() {
+    const id = this.selectedEntityId;
+    if (id === null) return;
+    this.#clipboard = { type: 'entity', snap: this.world.snapshotEntity(id) };
+  }
+
+  pasteEntity() {
+    if (!this.#clipboard || this.#clipboard.type !== 'entity') return;
+    const snap = this.#clipboard.snap;
+    const newId = this.world.createEntity();
+    for (const [name, data] of Object.entries(snap.components)) {
+      const Class = COMPONENT_REGISTRY[name];
+      if (Class) this.world.addComponent(newId, Class.deserialize(data));
+    }
+    const tag = this.world.getComponent(newId, TagComponent);
+    if (tag) tag.name = tag.name + ' Copy';
+    const t = this.world.getComponent(newId, TransformComponent);
+    if (t) { t.position.x += 0.5; t.position.z += 0.5; }
+    this.renderSystem.createObjectForEntity(newId);
+    this.commandManager.push(new SpawnCommand(this, newId));
+    this.emit('hierarchy:changed');
+    this.selectEntity(newId);
   }
 
   #spawnEntityRaw(name, setupFn) {

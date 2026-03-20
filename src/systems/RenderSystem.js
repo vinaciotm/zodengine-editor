@@ -179,7 +179,26 @@ export class RenderSystem {
       plane: () => new THREE.PlaneGeometry(1, 1),
     };
     const geo = (geos[comp.type] ?? geos.box)();
-    const mat = new THREE.MeshStandardMaterial({ color: comp.color });
+    const base = { color: comp.color };
+    let mat;
+    switch (comp.materialType ?? 'standard') {
+      case 'phong':
+        mat = new THREE.MeshPhongMaterial({ ...base, shininess: comp.shininess ?? 30 });
+        break;
+      case 'lambert':
+        mat = new THREE.MeshLambertMaterial(base);
+        break;
+      case 'basic':
+        mat = new THREE.MeshBasicMaterial(base);
+        break;
+      case 'toon':
+        mat = new THREE.MeshToonMaterial(base);
+        break;
+      default:
+        mat = new THREE.MeshStandardMaterial({ ...base, roughness: comp.roughness ?? 0.5, metalness: comp.metalness ?? 0 });
+    }
+    if ((comp.opacity ?? 1) < 1) { mat.transparent = true; mat.opacity = comp.opacity; }
+    if (comp.wireframe) mat.wireframe = true;
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;

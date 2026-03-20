@@ -10,12 +10,28 @@ export class TopBar {
 
   #docClickHandler = () => { this.#closeMenus(); };
   #keyHandler = (e) => {
+    const tag = e.target.tagName;
+    const inInput = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
     if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this.#save(); return; }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
       e.preventDefault(); this.#editor.commandManager.redo(); return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
       e.preventDefault(); this.#editor.commandManager.undo(); return;
+    }
+    if (!inInput && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'd') {
+      e.preventDefault();
+      if (this.#editor.selectedEntityId !== null) this.#editor.duplicateEntity(this.#editor.selectedEntityId);
+      return;
+    }
+    if (!inInput && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'c') {
+      this.#editor.copyEntity?.();
+      return;
+    }
+    if (!inInput && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'v') {
+      e.preventDefault();
+      this.#editor.pasteEntity?.();
+      return;
     }
     if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey) {
       const tag = e.target.tagName;

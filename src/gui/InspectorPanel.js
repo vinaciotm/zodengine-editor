@@ -1,4 +1,4 @@
-import { numInput, colorToHex, hexToNum, makeCollapsiblePanel } from './utils.js';
+import { numInput, dragNum, colorToHex, hexToNum, makeCollapsiblePanel } from './utils.js';
 import { TagComponent } from '../components/TagComponent.js';
 import { TransformComponent } from '../components/TransformComponent.js';
 import { MeshComponent } from '../components/MeshComponent.js';
@@ -183,11 +183,11 @@ export class InspectorPanel {
         axlbl.className = `xyz-label ${axis}`;
         axlbl.textContent = axis.toUpperCase();
 
-        const inp = numInput(getVal(axis), (val) => { setVal(axis, val); }, step);
-        inp.dataset.vecAxis = `${label}-${axis}`;
+        const dn = dragNum(getVal(axis), (val) => { setVal(axis, val); }, step);
+        dn.querySelector('input').dataset.vecAxis = `${label}-${axis}`;
 
         wrap.appendChild(axlbl);
-        wrap.appendChild(inp);
+        wrap.appendChild(dn);
         row.appendChild(wrap);
       });
 
@@ -248,6 +248,64 @@ export class InspectorPanel {
     colorRow.appendChild(colorInput);
     body.appendChild(colorRow);
 
+    // Material type
+    const matRow = document.createElement('div');
+    matRow.className = 'inspector-row';
+    matRow.innerHTML = '<span class="inspector-label">Material</span>';
+    const matSel = document.createElement('select');
+    matSel.className = 'inspector-select';
+    ['standard','phong','lambert','basic','toon'].forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+      if ((mesh.materialType ?? 'standard') === t) opt.selected = true;
+      matSel.appendChild(opt);
+    });
+    matRow.appendChild(matSel);
+    body.appendChild(matRow);
+
+    // Material config container (rebuilt on type change)
+    const matConfig = document.createElement('div');
+    body.appendChild(matConfig);
+
+    const buildMatConfig = (type) => {
+      matConfig.innerHTML = '';
+      const mkRow = (label, get, set, step = 0.01) => {
+        const r = document.createElement('div');
+        r.className = 'inspector-row';
+        r.innerHTML = `<span class="inspector-label">${label}</span>`;
+        const f = document.createElement('div');
+        f.className = 'inspector-field-axis';
+        f.appendChild(dragNum(get(), (val) => { set(val); this.#editor.rebuildEntityObject(entityId); }, step));
+        r.appendChild(f);
+        matConfig.appendChild(r);
+      };
+      if (type === 'standard') {
+        mkRow('Roughness', () => mesh.roughness ?? 0.5, v => { mesh.roughness = Math.max(0, Math.min(1, v)); }, 0.01);
+        mkRow('Metalness', () => mesh.metalness ?? 0,   v => { mesh.metalness = Math.max(0, Math.min(1, v)); }, 0.01);
+      } else if (type === 'phong') {
+        mkRow('Shininess', () => mesh.shininess ?? 30,  v => { mesh.shininess = Math.max(0, v); }, 1);
+      }
+      // Wireframe
+      const wfRow = document.createElement('div');
+      wfRow.className = 'inspector-row';
+      wfRow.innerHTML = '<span class="inspector-label">Wireframe</span>';
+      const wfCb = document.createElement('input');
+      wfCb.type = 'checkbox';
+      wfCb.checked = mesh.wireframe ?? false;
+      wfCb.addEventListener('change', () => { mesh.wireframe = wfCb.checked; this.#editor.rebuildEntityObject(entityId); });
+      wfRow.appendChild(wfCb);
+      matConfig.appendChild(wfRow);
+      // Opacity
+      mkRow('Opacity', () => mesh.opacity ?? 1, v => { mesh.opacity = Math.max(0, Math.min(1, v)); }, 0.01);
+    };
+
+    buildMatConfig(mesh.materialType ?? 'standard');
+    matSel.addEventListener('change', () => {
+      mesh.materialType = matSel.value;
+      buildMatConfig(mesh.materialType);
+      this.#editor.rebuildEntityObject(entityId);
+    });
+
     return sec;
   }
 
@@ -286,8 +344,7 @@ export class InspectorPanel {
     intRow.innerHTML = '<span class="inspector-label">Intensity</span>';
     const intField = document.createElement('div');
     intField.className = 'inspector-field-axis';
-    const intInp = numInput(light.intensity, (val) => { light.intensity = Math.max(0, val); this.#editor.updateEntityLight(entityId); }, 1);
-    intField.appendChild(intInp);
+    intField.appendChild(dragNum(light.intensity, (val) => { light.intensity = Math.max(0, val); this.#editor.updateEntityLight(entityId); }, 0.1));
     intRow.appendChild(intField);
     body.appendChild(intRow);
 
@@ -298,11 +355,10 @@ export class InspectorPanel {
       distRow.innerHTML = '<span class="inspector-label">Range</span>';
       const distField = document.createElement('div');
       distField.className = 'inspector-field-axis';
-      const distInp = numInput(light.distance ?? 10, (val) => {
+      distField.appendChild(dragNum(light.distance ?? 10, (val) => {
         light.distance = Math.max(0.1, val);
         this.#editor.updateEntityLight(entityId);
-      }, 0.5);
-      distField.appendChild(distInp);
+      }, 0.5));
       distRow.appendChild(distField);
       body.appendChild(distRow);
     }
@@ -319,11 +375,10 @@ export class InspectorPanel {
     fovRow.innerHTML = '<span class="inspector-label">FOV</span>';
     const fovField = document.createElement('div');
     fovField.className = 'inspector-field-axis';
-    const fovInp = numInput(camera.fov, (val) => {
+    fovField.appendChild(dragNum(camera.fov, (val) => {
       camera.fov = Math.max(10, Math.min(170, val));
       this.#editor.updateEntityCamera(entityId);
-    }, 1);
-    fovField.appendChild(fovInp);
+    }, 1));
     fovRow.appendChild(fovField);
     body.appendChild(fovRow);
 
@@ -332,11 +387,10 @@ export class InspectorPanel {
     nearRow.innerHTML = '<span class="inspector-label">Near</span>';
     const nearField = document.createElement('div');
     nearField.className = 'inspector-field-axis';
-    const nearInp = numInput(camera.near, (val) => {
+    nearField.appendChild(dragNum(camera.near, (val) => {
       camera.near = Math.max(0.001, val);
       this.#editor.updateEntityCamera(entityId);
-    }, 0.01);
-    nearField.appendChild(nearInp);
+    }, 0.01));
     nearRow.appendChild(nearField);
     body.appendChild(nearRow);
 
@@ -345,11 +399,10 @@ export class InspectorPanel {
     farRow.innerHTML = '<span class="inspector-label">Far</span>';
     const farField = document.createElement('div');
     farField.className = 'inspector-field-axis';
-    const farInp = numInput(camera.far, (val) => {
+    farField.appendChild(dragNum(camera.far, (val) => {
       camera.far = Math.max(1, val);
       this.#editor.updateEntityCamera(entityId);
-    }, 10);
-    farField.appendChild(farInp);
+    }, 10));
     farRow.appendChild(farField);
     body.appendChild(farRow);
 
@@ -380,8 +433,7 @@ export class InspectorPanel {
     sizeRow.innerHTML = '<span class="inspector-label">Size</span>';
     const sizeField = document.createElement('div');
     sizeField.className = 'inspector-field-axis';
-    const sizeInp = numInput(trigger.size, (val) => { trigger.size = Math.max(0.01, val); this.#editor.rebuildEntityObject(entityId); }, 0.1);
-    sizeField.appendChild(sizeInp);
+    sizeField.appendChild(dragNum(trigger.size, (val) => { trigger.size = Math.max(0.01, val); this.#editor.rebuildEntityObject(entityId); }, 0.1));
     sizeRow.appendChild(sizeField);
     body.appendChild(sizeRow);
 
@@ -410,7 +462,7 @@ export class InspectorPanel {
       row.innerHTML = `<span class="inspector-label">${label}</span>`;
       const field = document.createElement('div');
       field.className = 'inspector-field-axis';
-      field.appendChild(numInput(get(), set, step));
+      field.appendChild(dragNum(get(), set, step));
       row.appendChild(field);
       body.appendChild(row);
     };

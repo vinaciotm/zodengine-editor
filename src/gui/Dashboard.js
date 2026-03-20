@@ -5,7 +5,10 @@ export class Dashboard {
   #projectManager = null;
   #onOpen = null;
   #openGear = null;
-  #docClick = () => this.#closeGear();
+  #docClick = () => {
+    this.#closeGear();
+    this.#el?.querySelectorAll('.topbar-dropdown').forEach(d => d.classList.remove('open'));
+  };
 
   constructor(projectManager, onOpen) {
     this.#projectManager = projectManager;
@@ -46,6 +49,7 @@ export class Dashboard {
         <div class="db-topbar-menu" id="db-editor-btn-wrap">
           <img src="/brand.png" class="topbar-brand-logo" alt="Zod" />
           <button class="db-topbar-btn" id="db-editor-btn">Editor</button>
+          <button class="db-topbar-btn" id="db-project-btn">Project</button>
         </div>
         <span class="db-topbar-title">Zod Engine</span>
         <div class="db-topbar-right"></div>
@@ -57,6 +61,7 @@ export class Dashboard {
     `;
 
     this.#buildEditorMenu();
+    this.#buildProjectMenu();
 
     const grid = this.#el.querySelector('#project-grid');
 
@@ -163,6 +168,7 @@ export class Dashboard {
     const dropdown = document.createElement('div');
     dropdown.className = 'topbar-dropdown';
 
+    // Theme row
     const themeRow = document.createElement('div');
     themeRow.className = 'topbar-dropdown-item topbar-theme-row';
     themeRow.innerHTML = `<span>Theme</span>`;
@@ -178,6 +184,56 @@ export class Dashboard {
     themeSelect.addEventListener('click', (e) => e.stopPropagation());
     themeRow.appendChild(themeSelect);
     dropdown.appendChild(themeRow);
+
+    // Language
+    const langItem = document.createElement('div');
+    langItem.className = 'topbar-dropdown-item';
+    langItem.textContent = 'Language';
+    langItem.addEventListener('click', (e) => { e.stopPropagation(); showToast('Coming soon'); dropdown.classList.remove('open'); });
+    dropdown.appendChild(langItem);
+
+    // Shortcuts
+    const shortItem = document.createElement('div');
+    shortItem.className = 'topbar-dropdown-item';
+    shortItem.textContent = 'Shortcuts';
+    shortItem.addEventListener('click', (e) => { e.stopPropagation(); showToast('Coming soon'); dropdown.classList.remove('open'); });
+    dropdown.appendChild(shortItem);
+
+    // Sep + Exit
+    const sep = document.createElement('div');
+    sep.className = 'topbar-dropdown-sep';
+    dropdown.appendChild(sep);
+
+    const exitItem = document.createElement('div');
+    exitItem.className = 'topbar-dropdown-item danger';
+    exitItem.textContent = 'Exit';
+    exitItem.addEventListener('click', (e) => { e.stopPropagation(); window.close(); });
+    dropdown.appendChild(exitItem);
+
+    btn.appendChild(dropdown);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+  }
+
+  #buildProjectMenu() {
+    const btn = this.#el.querySelector('#db-project-btn');
+    if (!btn) return;
+    btn.style.position = 'relative';
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'topbar-dropdown';
+
+    const newItem = document.createElement('div');
+    newItem.className = 'topbar-dropdown-item';
+    newItem.innerHTML = '&#10010; New Project';
+    newItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.remove('open');
+      this.#createProject();
+    });
+    dropdown.appendChild(newItem);
 
     const importItem = document.createElement('div');
     importItem.className = 'topbar-dropdown-item';
