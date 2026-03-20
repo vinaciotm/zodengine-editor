@@ -59,6 +59,14 @@ export class World {
     this.#nextEntityId = 1;
   }
 
+  snapshotEntity(id) {
+    const comps = {};
+    for (const [Class, comp] of (this.#components.get(id) ?? new Map())) {
+      if (comp.serialize) comps[Class.name] = comp.serialize();
+    }
+    return { id, components: comps };
+  }
+
   snapshot() {
     const data = { nextId: this.#nextEntityId, entities: [] };
     for (const id of this.#entities) {
@@ -69,6 +77,17 @@ export class World {
       data.entities.push({ id, components: comps });
     }
     return data;
+  }
+
+  restoreEntity(snapshot, componentRegistry) {
+    const { id, components } = snapshot;
+    if (this.#entities.has(id)) return; // already exists
+    this.#entities.add(id);
+    this.#components.set(id, new Map());
+    for (const [name, compData] of Object.entries(components)) {
+      const Class = componentRegistry[name];
+      if (Class) this.#components.get(id).set(Class, Class.deserialize(compData));
+    }
   }
 
   restore(data, componentRegistry) {

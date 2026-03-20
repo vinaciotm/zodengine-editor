@@ -44,6 +44,7 @@ export class Dashboard {
     this.#el.innerHTML = `
       <div class="db-topbar">
         <div class="db-topbar-menu" id="db-editor-btn-wrap">
+          <img src="/brand.png" class="topbar-brand-logo" alt="Zod" />
           <button class="db-topbar-btn" id="db-editor-btn">Editor</button>
         </div>
         <span class="db-topbar-title">Zod Engine</span>

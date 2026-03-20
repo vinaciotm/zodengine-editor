@@ -26,7 +26,7 @@ export class HierarchyPanel {
 
     const header = document.createElement('div');
     header.className = 'panel-header';
-    header.innerHTML = `<span>&#128279; GameObjects</span>`;
+    header.innerHTML = `<span>&#128279; Objetos</span>`;
     this.#el.appendChild(header);
 
     this.#contentEl = document.createElement('div');

@@ -11,6 +11,12 @@ export class TopBar {
   #docClickHandler = () => { this.#closeMenus(); };
   #keyHandler = (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this.#save(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
+      e.preventDefault(); this.#editor.commandManager.redo(); return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      e.preventDefault(); this.#editor.commandManager.undo(); return;
+    }
     if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey) {
       const tag = e.target.tagName;
       if (tag !== 'INPUT' && tag !== 'SELECT' && tag !== 'TEXTAREA') {
@@ -48,13 +54,16 @@ export class TopBar {
     const name = this.#editor.project.name;
     this.#el.innerHTML = `
       <div class="topbar-menu" id="topbar-menu">
+        <img src="/brand.png" class="topbar-brand-logo" alt="Zod" />
         <button class="topbar-btn" id="tbtn-editor">Editor</button>
         <button class="topbar-btn" id="tbtn-project">Project</button>
         <button class="topbar-btn" id="tbtn-scene">Scene</button>
       </div>
-      <div class="topbar-title">${this.#esc(name)} &mdash; ${this.#currentSceneName()}</div>
+      <div class="topbar-center">
+        <button class="topbar-btn topbar-play-btn" id="tbtn-play" title="Play [P]">&#9654; Play</button>
+      </div>
       <div class="topbar-right">
-        <button class="topbar-btn" id="tbtn-play" title="Play [P]" style="color:var(--success);font-weight:700;padding:0 14px;">&#9654; Play</button>
+        <span class="topbar-info">${this.#esc(name)} &mdash; ${this.#esc(this.#currentSceneName())}</span>
         <span class="topbar-badge" id="save-badge">Unsaved</span>
       </div>
     `;
@@ -524,8 +533,8 @@ export class TopBar {
   }
 
   #refreshTitle() {
-    const title = this.#el?.querySelector('.topbar-title');
-    if (title) title.innerHTML = `${this.#esc(this.#editor.project.name)} &mdash; ${this.#currentSceneName()}`;
+    const info = this.#el?.querySelector('.topbar-info');
+    if (info) info.textContent = `${this.#editor.project.name} \u2014 ${this.#currentSceneName()}`;
   }
 
   #closeMenus() {

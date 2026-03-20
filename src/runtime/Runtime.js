@@ -57,12 +57,17 @@ export class Runtime {
       background: rgba(0,0,0,0.75); display: flex; align-items: center;
       padding: 0 16px; gap: 12px; z-index: 1; font-family: system-ui; font-size: 13px; color: #ccc;
     `;
+    hud.style.position = 'relative';
     hud.innerHTML = `
       <span style="color:#3fd46b;font-weight:700;">&#9654; Runtime</span>
       <span>${sceneData?.name ?? 'Scene'}</span>
       <span style="flex:1"></span>
-      <span style="color:#888;font-size:11px;">Click viewport: mouse look &nbsp;|&nbsp; WASD: move &nbsp;|&nbsp; Q/E: down/up &nbsp;|&nbsp; Esc: exit</span>
-      <button id="runtime-exit" style="padding:4px 12px;background:#d43f3f;border:none;border-radius:3px;color:white;cursor:pointer;font-size:12px;">&#9632; Exit</button>
+      <span style="color:#888;font-size:11px;">Click: mouse look &nbsp;|&nbsp; WASD: move &nbsp;|&nbsp; Q/E: up/down &nbsp;|&nbsp; Esc: exit</span>
+      <button id="runtime-exit" style="
+        position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+        padding:4px 16px;background:#d43f3f;border:none;border-radius:3px;
+        color:white;cursor:pointer;font-size:12px;font-weight:600;
+      ">&#9632; Exit</button>
     `;
     this.#overlay.appendChild(hud);
     hud.querySelector('#runtime-exit').addEventListener('click', () => this.stop());

@@ -43,25 +43,26 @@ export class EditorLayout {
     body.className = 'editor-body';
     el.appendChild(body);
 
+    // Left-center wrapper (column: main row + footer)
+    const leftCenter = document.createElement('div');
+    leftCenter.className = 'editor-left-center';
+    body.appendChild(leftCenter);
+
+    const mainRow = document.createElement('div');
+    mainRow.className = 'editor-main-row';
+    leftCenter.appendChild(mainRow);
+
     const left = document.createElement('div');
     left.className = 'editor-left';
-    body.appendChild(left);
-
-    const scenes = new ScenesPanel(editor);
-    scenes.mount(left);
-    this.#panels.push(scenes);
+    mainRow.appendChild(left);
 
     const hierarchy = new HierarchyPanel(editor);
     hierarchy.mount(left);
     this.#panels.push(hierarchy);
 
-    const prefabs = new PrefabsPanel(editor);
-    prefabs.mount(left);
-    this.#panels.push(prefabs);
-
     const center = document.createElement('div');
     center.className = 'editor-center';
-    body.appendChild(center);
+    mainRow.appendChild(center);
 
     const viewport = document.createElement('div');
     viewport.className = 'viewport-wrapper';
@@ -72,7 +73,6 @@ export class EditorLayout {
     toolbar.mount(viewport);
     this.#panels.push(toolbar);
 
-    // Group action bar overlay above viewport
     const groupBar = new GroupActionBar(editor);
     groupBar.mount(viewport);
     this.#panels.push(groupBar);
@@ -81,6 +81,28 @@ export class EditorLayout {
 
     editor.on('notification', msg => showToast(msg, 'error'));
 
+    // Footer: Cenários (left) + Assets (rest)
+    const footer = document.createElement('div');
+    footer.className = 'editor-footer';
+    leftCenter.appendChild(footer);
+
+    const scenesWrap = document.createElement('div');
+    scenesWrap.className = 'editor-footer-scenes';
+    footer.appendChild(scenesWrap);
+
+    const scenes = new ScenesPanel(editor);
+    scenes.mount(scenesWrap);
+    this.#panels.push(scenes);
+
+    const assetsWrap = document.createElement('div');
+    assetsWrap.className = 'editor-footer-assets';
+    footer.appendChild(assetsWrap);
+
+    const prefabs = new PrefabsPanel(editor);
+    prefabs.mount(assetsWrap);
+    this.#panels.push(prefabs);
+
+    // Right: Detalhes
     const right = document.createElement('div');
     right.className = 'editor-right';
     body.appendChild(right);

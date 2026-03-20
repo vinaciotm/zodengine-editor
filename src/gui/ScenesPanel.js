@@ -11,13 +11,13 @@ export class ScenesPanel {
   mount(parent) {
     this.#el = document.createElement('div');
     this.#el.className = 'panel';
-    this.#el.style.cssText = 'flex-shrink:0;border-top:1px solid var(--border);';
+    this.#el.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column;';
     parent.appendChild(this.#el);
 
     const header = document.createElement('div');
     header.className = 'panel-header';
     header.innerHTML = `
-      <span>&#127916; Scenes</span>
+      <span>&#127916; Cenários</span>
       <div class="panel-header-actions">
         <button class="btn-icon btn" id="scene-add" title="Add Scene">+</button>
       </div>

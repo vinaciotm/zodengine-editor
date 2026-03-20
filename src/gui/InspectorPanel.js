@@ -38,7 +38,7 @@ export class InspectorPanel {
   }
 
   #render() {
-    this.#el.innerHTML = '<div class="panel-header"><span>&#128196; Inspector</span></div><div class="panel-content" id="insp-content"></div>';
+    this.#el.innerHTML = '<div class="panel-header"><span>&#128196; Detalhes</span></div><div class="panel-content" id="insp-content"></div>';
     makeCollapsiblePanel(
       this.#el.querySelector('.panel-header'),
       this.#el.querySelector('#insp-content'),

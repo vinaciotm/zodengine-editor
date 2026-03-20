@@ -18,7 +18,7 @@ export class PrefabsPanel {
 
   #render() {
     this.#el.innerHTML = `
-      <div class="panel-header" id="prefabs-header"><span>&#128736; Elements</span></div>
+      <div class="panel-header" id="prefabs-header"><span>&#128736; Assets</span></div>
       <div class="panel-content" id="prefabs-content" style="overflow-y:auto;flex:1;">
         <div class="prefab-section-title">Primitives</div>
         <div class="prefab-grid">
@@ -32,7 +32,7 @@ export class PrefabsPanel {
         <div class="prefab-section-title">Lights</div>
         <div class="prefab-grid">
           <button class="prefab-btn" data-spawn="pointlight"><span class="icon">&#128161;</span>Point</button>
-          <button class="prefab-btn" data-spawn="dirlight"><span class="icon">&#9728;</span>Dir</button>
+          <button class="prefab-btn" data-spawn="dirlight"><span class="icon">&#9728;</span>Directional</button>
           <button class="prefab-btn" data-spawn="spotlight"><span class="icon">&#128294;</span>Spot</button>
         </div>
         <div class="prefab-section-title">Other</div>

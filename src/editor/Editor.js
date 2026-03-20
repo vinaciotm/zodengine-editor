@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { CommandManager, SpawnCommand, DeleteCommand, RenameCommand, TransformCommand } from './CommandManager.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { World } from '../ecs/World.js';
@@ -45,9 +46,11 @@ export class Editor {
   selectedEntityIds = new Set();
   transformMode = 'translate';
   project = null;
+  commandManager = new CommandManager();
 
   #viewMode = 'default';
   #helpers = new Map();
+  #transformBefore = null;
 
   #listeners = new Map();
   container = null;
@@ -92,6 +95,15 @@ export class Editor {
 
     this.transformControls.addEventListener('dragging-changed', (e) => {
       this.orbitControls.enabled = !e.value;
+      if (e.value) {
+        this.#transformBefore = this.#captureTransform(this.selectedEntityId);
+      } else {
+        if (this.#transformBefore !== null && this.selectedEntityId !== null) {
+          const after = this.#captureTransform(this.selectedEntityId);
+          this.commandManager.push(new TransformCommand(this, this.selectedEntityId, this.#transformBefore, after));
+          this.#transformBefore = null;
+        }
+      }
     });
 
     this.transformControls.addEventListener('objectChange', () => {
@@ -472,6 +484,13 @@ export class Editor {
   // --- Prefab factories ---
 
   spawnEntity(name, setupFn) {
+    const id = this.#spawnEntityRaw(name, setupFn);
+    this.commandManager.push(new SpawnCommand(this, id));
+    this.emit('hierarchy:changed');
+    return id;
+  }
+
+  #spawnEntityRaw(name, setupFn) {
     const id = this.world.createEntity();
     this.world.addComponent(id, new TagComponent(name));
     this.world.addComponent(id, new TransformComponent());
@@ -481,8 +500,54 @@ export class Editor {
       const obj = this.renderSystem.getObject3D(id);
       if (obj) this.#applyViewModeToObject(obj, this.#viewMode);
     }
-    this.emit('hierarchy:changed');
     return id;
+  }
+
+  // Silently restore an entity from a snapshot (for undo/redo — no new command pushed)
+  restoreEntitySilent(snapshot) {
+    this.world.restoreEntity(snapshot, COMPONENT_REGISTRY);
+    this.renderSystem.createObjectForEntity(snapshot.id);
+    if (this.#viewMode !== 'default') {
+      const obj = this.renderSystem.getObject3D(snapshot.id);
+      if (obj) this.#applyViewModeToObject(obj, this.#viewMode);
+    }
+    this.emit('hierarchy:changed');
+  }
+
+  // Silently delete an entity (for undo/redo — no new command pushed)
+  deleteEntitySilent(entityId) { this.#deleteEntityRaw(entityId); }
+
+  // Silently rename (for undo/redo)
+  renameEntitySilent(entityId, name) {
+    const tag = this.world.getComponent(entityId, TagComponent);
+    if (tag) { tag.name = name; this.emit('hierarchy:changed'); }
+  }
+
+  // Capture/apply transform snapshots for undo/redo
+  #captureTransform(entityId) {
+    const tc = this.world.getComponent(entityId, TransformComponent);
+    if (!tc) return null;
+    return {
+      position: tc.position.clone(),
+      rotation: tc.rotation.clone(),
+      scale: tc.scale.clone(),
+    };
+  }
+
+  applyTransformSilent(entityId, snap) {
+    if (!snap) return;
+    const tc = this.world.getComponent(entityId, TransformComponent);
+    if (!tc) return;
+    tc.position.copy(snap.position);
+    tc.rotation.copy(snap.rotation);
+    tc.scale.copy(snap.scale);
+    const obj = this.renderSystem.getObject3D(entityId);
+    if (obj) { obj.position.copy(tc.position); obj.rotation.copy(tc.rotation); obj.scale.copy(tc.scale); }
+    if (this.selectedEntityId === entityId) {
+      const obj2 = this.renderSystem.getObject3D(entityId);
+      if (obj2) this.transformControls.attach(obj2);
+    }
+    this.emit('entity:changed', entityId);
   }
 
   spawnCube() { return this.spawnEntity('Cube', id => this.world.addComponent(id, new MeshComponent('box', 0x4a9eff))); }
@@ -533,29 +598,24 @@ export class Editor {
         return;
       }
     }
+    const cmd = new DeleteCommand(this, entityId);
+    this.#deleteEntityRaw(entityId);
+    this.commandManager.push(cmd);
+  }
 
+  #deleteEntityRaw(entityId) {
     if (this.selectedEntityId === entityId) this.selectEntity(null);
     this.selectedEntityIds.delete(entityId);
-
     const helper = this.#helpers.get(entityId);
-    if (helper) {
-      this.threeScene.remove(helper);
-      helper.dispose?.();
-      this.#helpers.delete(entityId);
-    }
-
+    if (helper) { this.threeScene.remove(helper); helper.dispose?.(); this.#helpers.delete(entityId); }
     const groupComp = this.world.getComponent(entityId, GroupComponent);
     if (groupComp) {
       const children = this.world.entities.filter(id => {
         const p = this.world.getComponent(id, ParentComponent);
         return p?.parentId === entityId;
       });
-      for (const cid of children) {
-        this.renderSystem.removeObjectForEntity(cid);
-        this.world.destroyEntity(cid);
-      }
+      for (const cid of children) { this.renderSystem.removeObjectForEntity(cid); this.world.destroyEntity(cid); }
     }
-
     this.renderSystem.removeObjectForEntity(entityId);
     this.world.destroyEntity(entityId);
     this.emit('hierarchy:changed');
@@ -563,7 +623,11 @@ export class Editor {
 
   renameEntity(entityId, name) {
     const tag = this.world.getComponent(entityId, TagComponent);
-    if (tag) { tag.name = name; this.emit('hierarchy:changed'); }
+    if (!tag) return;
+    const before = tag.name;
+    tag.name = name;
+    this.commandManager.push(new RenameCommand(this, entityId, before, name));
+    this.emit('hierarchy:changed');
   }
 
   rebuildEntityObject(entityId) {
@@ -661,13 +725,21 @@ export class Editor {
   #ensureSceneHasCamera() {
     const hasCam = this.world.entities.some(id => this.world.getComponent(id, CameraComponent));
     if (!hasCam) {
-      const id = this.world.createEntity();
-      this.world.addComponent(id, new TagComponent('Camera'));
+      const camId = this.world.createEntity();
+      this.world.addComponent(camId, new TagComponent('Camera'));
       const t = new TransformComponent();
       t.position.set(0, 2, 5);
-      this.world.addComponent(id, t);
-      this.world.addComponent(id, new CameraComponent());
-      this.renderSystem.createObjectForEntity(id);
+      this.world.addComponent(camId, t);
+      this.world.addComponent(camId, new CameraComponent());
+      this.renderSystem.createObjectForEntity(camId);
+
+      const lightId = this.world.createEntity();
+      this.world.addComponent(lightId, new TagComponent('Directional Light'));
+      const lt = new TransformComponent();
+      lt.position.set(3, 6, 4);
+      this.world.addComponent(lightId, lt);
+      this.world.addComponent(lightId, new LightComponent('directional', 0xffffff, 1));
+      this.renderSystem.createObjectForEntity(lightId);
     }
   }
 
@@ -721,6 +793,7 @@ export class Editor {
     this.saveCurrentScene();
     this.project.currentSceneIndex = sceneIndex;
     this.#loadCurrentScene();
+    this.commandManager.clear();
     this.emit('scene:switched', sceneIndex);
     this.emit('scenes:changed');
   }
