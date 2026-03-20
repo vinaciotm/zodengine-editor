@@ -65,6 +65,12 @@ export class Dashboard {
     newCard.addEventListener('click', () => this.#createProject());
     grid.appendChild(newCard);
 
+    const importCard = document.createElement('div');
+    importCard.className = 'project-new-card';
+    importCard.innerHTML = '<div class="plus">&#128229;</div><div>Import Project</div>';
+    importCard.addEventListener('click', () => this.#importProject());
+    grid.appendChild(importCard);
+
     for (const project of projects) {
       grid.insertBefore(this.#makeCard(project), newCard);
     }
