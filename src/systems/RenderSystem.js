@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { TransformComponent } from '../components/TransformComponent.js';
 import { MeshComponent } from '../components/MeshComponent.js';
 import { LightComponent } from '../components/LightComponent.js';
@@ -6,11 +6,13 @@ import { TriggerComponent } from '../components/TriggerComponent.js';
 import { PlayerStartComponent } from '../components/PlayerStartComponent.js';
 import { GroupComponent } from '../components/GroupComponent.js';
 import { CameraComponent } from '../components/CameraComponent.js';
+import { FogComponent } from '../components/FogComponent.js';
 
 export class RenderSystem {
   world = null;
   scene = null;
   entityObjects = new Map();
+  lightingEnabled = true;
   #parentCompClass = null;
 
   constructor(threeScene) {
@@ -37,6 +39,7 @@ export class RenderSystem {
   removeObjectForEntity(entityId) {
     const obj = this.entityObjects.get(entityId);
     if (obj) {
+      if (obj.userData.isFogEntity) this.scene.fog = null;
       if (obj.parent) obj.parent.remove(obj);
       else this.scene.remove(obj);
       this.entityObjects.delete(entityId);
@@ -74,6 +77,16 @@ export class RenderSystem {
 
   getObject3D(entityId) { return this.entityObjects.get(entityId) ?? null; }
 
+  setLightingEnabled(enabled) {
+    this.lightingEnabled = enabled;
+    for (const obj of this.entityObjects.values()) {
+      obj.traverse(child => {
+        if (child.isLight) child.visible = enabled;
+      });
+    }
+    if (!enabled) this.scene.fog = null;
+  }
+
   // Hide all editor-only visual indicators (sprites, line groups, range rings)
   hideEditorIcons() {
     for (const obj of this.entityObjects.values()) {
@@ -85,6 +98,25 @@ export class RenderSystem {
 
   update() {
     for (const [entityId, obj] of this.entityObjects) {
+      // Fog entities: update scene.fog from component values (only in lit mode)
+      if (obj.userData.isFogEntity) {
+        if (this.lightingEnabled) {
+          const fog = this.world?.getComponent(entityId, FogComponent);
+          if (fog) {
+            if (this.scene.fog) {
+              this.scene.fog.color.set(fog.color);
+              this.scene.fog.near = fog.near;
+              this.scene.fog.far = fog.far;
+            } else {
+              this.scene.fog = new THREE.Fog(fog.color, fog.near, fog.far);
+            }
+          }
+        } else {
+          this.scene.fog = null;
+        }
+        continue;
+      }
+
       const t = this.world?.getComponent(entityId, TransformComponent);
       if (t) {
         obj.position.copy(t.position);
@@ -117,6 +149,7 @@ export class RenderSystem {
     const player = w?.getComponent(entityId, PlayerStartComponent);
     const group = w?.getComponent(entityId, GroupComponent);
     const camera = w?.getComponent(entityId, CameraComponent);
+    const fog = w?.getComponent(entityId, FogComponent);
 
     if (group) return new THREE.Group();
     if (mesh) return this.#makeMesh(mesh);
@@ -124,6 +157,12 @@ export class RenderSystem {
     if (camera) return this.#makeCamera(camera);
     if (trigger) return this.#makeTrigger(trigger);
     if (player) return this.#makePlayerStart();
+    if (fog) {
+      const marker = new THREE.Object3D();
+      marker.userData.isFogEntity = true;
+      this.scene.fog = new THREE.Fog(fog.color, fog.near, fog.far);
+      return marker;
+    }
     return new THREE.Object3D();
   }
 
@@ -146,6 +185,15 @@ export class RenderSystem {
 
   #makeLight(comp) {
     const grp = new THREE.Group();
+
+    // Ambient light: scene-wide, no position/shadow/sprite
+    if (comp.type === 'ambient') {
+      const light = new THREE.AmbientLight(comp.color, comp.intensity);
+      grp.add(light);
+      grp.userData.lightRef = light;
+      return grp;
+    }
+
     let light;
 
     switch (comp.type) {

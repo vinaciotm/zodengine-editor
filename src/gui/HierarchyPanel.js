@@ -7,6 +7,7 @@ import { PlayerStartComponent } from '../components/PlayerStartComponent.js';
 import { GroupComponent } from '../components/GroupComponent.js';
 import { ParentComponent } from '../components/ParentComponent.js';
 import { CameraComponent } from '../components/CameraComponent.js';
+import { FogComponent } from '../components/FogComponent.js';
 
 export class HierarchyPanel {
   #el = null;
@@ -79,8 +80,9 @@ export class HierarchyPanel {
       const isGroup = editor.world.hasComponent(id, GroupComponent);
       const isCollapsed = isGroup && this.#collapsedGroups.has(id);
 
+      const isVisible = editor.isEntityVisible(id);
       const row = document.createElement('div');
-      row.className = 'hierarchy-item' + (isSelected ? ' selected' : '');
+      row.className = 'hierarchy-item' + (isSelected ? ' selected' : '') + (isVisible ? '' : ' entity-hidden');
       row.dataset.entityId = id;
 
       const indentEl = document.createElement('span');
@@ -124,6 +126,16 @@ export class HierarchyPanel {
         row.addEventListener('mouseover', () => { ungroupBtn.style.opacity = '1'; });
         row.addEventListener('mouseleave', () => { ungroupBtn.style.opacity = '0'; });
       }
+
+      const eyeBtn = document.createElement('span');
+      eyeBtn.className = 'hierarchy-item-eye' + (isVisible ? '' : ' hidden');
+      eyeBtn.title = isVisible ? 'Hide' : 'Show';
+      eyeBtn.innerHTML = '&#128065;';
+      eyeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        editor.toggleEntityVisibility(id);
+      });
+      actionsEl.appendChild(eyeBtn);
 
       const delBtn = document.createElement('span');
       delBtn.className = 'hierarchy-item-del';
@@ -207,6 +219,7 @@ export class HierarchyPanel {
     if (w.hasComponent(entityId, GroupComponent)) return '&#128193;';
     if (w.hasComponent(entityId, LightComponent)) return '&#128161;';
     if (w.hasComponent(entityId, CameraComponent)) return '&#127909;';
+    if (w.hasComponent(entityId, FogComponent)) return '&#127568;';
     if (w.hasComponent(entityId, TriggerComponent)) return '&#128993;';
     if (w.hasComponent(entityId, PlayerStartComponent)) return '&#128694;';
     if (w.hasComponent(entityId, MeshComponent)) return '&#9632;';

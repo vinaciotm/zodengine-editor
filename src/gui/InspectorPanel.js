@@ -6,6 +6,7 @@ import { LightComponent } from '../components/LightComponent.js';
 import { TriggerComponent } from '../components/TriggerComponent.js';
 import { ParentComponent } from '../components/ParentComponent.js';
 import { CameraComponent } from '../components/CameraComponent.js';
+import { FogComponent } from '../components/FogComponent.js';
 
 export class InspectorPanel {
   #el = null;
@@ -53,6 +54,16 @@ export class InspectorPanel {
 
     const world = this.#editor.world;
 
+    // Parent indicator — shown ABOVE name, just below header
+    const parentComp = world.getComponent(entityId, ParentComponent);
+    if (parentComp) {
+      const parentTag = world.getComponent(parentComp.parentId, TagComponent);
+      const badge = document.createElement('div');
+      badge.style.cssText = 'padding:4px 12px;font-size:11px;color:var(--accent2);background:var(--bg-dark);border-bottom:1px solid var(--border);';
+      badge.textContent = `↳ Child of: ${parentTag?.name ?? 'Group'} (local coords)`;
+      content.appendChild(badge);
+    }
+
     // Name
     const tag = world.getComponent(entityId, TagComponent);
     if (tag) {
@@ -64,16 +75,6 @@ export class InspectorPanel {
         this.#editor.renameEntity(entityId, nameInput.value.trim() || 'Entity');
       });
       content.appendChild(nameInput);
-    }
-
-    // Parent indicator
-    const parentComp = world.getComponent(entityId, ParentComponent);
-    if (parentComp) {
-      const parentTag = world.getComponent(parentComp.parentId, TagComponent);
-      const badge = document.createElement('div');
-      badge.style.cssText = 'padding:4px 12px;font-size:11px;color:var(--accent2);background:var(--bg-dark);border-bottom:1px solid var(--border);';
-      badge.textContent = `↳ Child of: ${parentTag?.name ?? 'Group'} (local coords)`;
-      content.appendChild(badge);
     }
 
     // Transform
@@ -91,6 +92,10 @@ export class InspectorPanel {
     // Camera
     const camera = world.getComponent(entityId, CameraComponent);
     if (camera) content.appendChild(this.#buildCameraSection(entityId, camera));
+
+    // Fog
+    const fog = world.getComponent(entityId, FogComponent);
+    if (fog) content.appendChild(this.#buildFogSection(entityId, fog));
 
     // Trigger
     const trigger = world.getComponent(entityId, TriggerComponent);
@@ -190,10 +195,14 @@ export class InspectorPanel {
       (axis, val) => { transform.rotation[axis] = val * Math.PI / 180; sync(); },
       1
     ));
-    body.appendChild(makeVec3Block('Scale',
-      axis => transform.scale[axis],
-      (axis, val) => { transform.scale[axis] = val; sync(); }
-    ));
+    // Scale is hidden for cameras and lights (not applicable)
+    const isScaleLocked = this.#editor.isScaleLocked(entityId);
+    if (!isScaleLocked) {
+      body.appendChild(makeVec3Block('Scale',
+        axis => transform.scale[axis],
+        (axis, val) => { transform.scale[axis] = val; sync(); }
+      ));
+    }
 
     return sec;
   }
@@ -240,7 +249,7 @@ export class InspectorPanel {
     typeRow.innerHTML = '<span class="inspector-label">Type</span>';
     const sel = document.createElement('select');
     sel.className = 'inspector-select';
-    ['point','directional','spot'].forEach(t => {
+    ['point','directional','spot','ambient'].forEach(t => {
       const opt = document.createElement('option');
       opt.value = t; opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
       if (t === light.type) opt.selected = true;
@@ -364,6 +373,38 @@ export class InspectorPanel {
     sizeField.appendChild(sizeInp);
     sizeRow.appendChild(sizeField);
     body.appendChild(sizeRow);
+
+    return sec;
+  }
+
+  #buildFogSection(entityId, fog) {
+    const sec = this.#section('Fog', 'fog-section');
+    const body = sec.querySelector('.inspector-section-body');
+
+    const colorRow = document.createElement('div');
+    colorRow.className = 'inspector-row';
+    colorRow.innerHTML = '<span class="inspector-label">Color</span>';
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.className = 'inspector-input';
+    colorInput.value = colorToHex(fog.color);
+    colorInput.style.cssText = 'width:44px;padding:1px 2px;height:24px;cursor:pointer;';
+    colorInput.addEventListener('input', () => { fog.color = hexToNum(colorInput.value); });
+    colorRow.appendChild(colorInput);
+    body.appendChild(colorRow);
+
+    const mkRow = (label, get, set, step) => {
+      const row = document.createElement('div');
+      row.className = 'inspector-row';
+      row.innerHTML = `<span class="inspector-label">${label}</span>`;
+      const field = document.createElement('div');
+      field.className = 'inspector-field-axis';
+      field.appendChild(numInput(get(), set, step));
+      row.appendChild(field);
+      body.appendChild(row);
+    };
+    mkRow('Near', () => fog.near, v => { fog.near = Math.max(0, v); }, 0.5);
+    mkRow('Far',  () => fog.far,  v => { fog.far  = Math.max(fog.near + 0.1, v); }, 1);
 
     return sec;
   }

@@ -6,6 +6,7 @@ import { ScenesPanel } from './ScenesPanel.js';
 import { TransformToolbar } from './TransformToolbar.js';
 import { GroupActionBar } from './GroupActionBar.js';
 import { Runtime } from '../runtime/Runtime.js';
+import { showToast } from './utils.js';
 
 export class EditorLayout {
   #el = null;
@@ -58,14 +59,14 @@ export class EditorLayout {
     center.className = 'editor-center';
     body.appendChild(center);
 
-    const toolbar = new TransformToolbar(editor);
-    toolbar.mount(center);
-    this.#panels.push(toolbar);
-
     const viewport = document.createElement('div');
     viewport.className = 'viewport-wrapper';
     viewport.style.position = 'relative';
     center.appendChild(viewport);
+
+    const toolbar = new TransformToolbar(editor);
+    toolbar.mount(viewport);
+    this.#panels.push(toolbar);
 
     // Group action bar overlay above viewport
     const groupBar = new GroupActionBar(editor);
@@ -73,6 +74,8 @@ export class EditorLayout {
     this.#panels.push(groupBar);
 
     await editor.init(viewport);
+
+    editor.on('notification', msg => showToast(msg, 'error'));
 
     const right = document.createElement('div');
     right.className = 'editor-right';

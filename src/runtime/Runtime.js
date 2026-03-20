@@ -10,11 +10,12 @@ import { PlayerStartComponent } from '../components/PlayerStartComponent.js';
 import { GroupComponent } from '../components/GroupComponent.js';
 import { ParentComponent } from '../components/ParentComponent.js';
 import { CameraComponent } from '../components/CameraComponent.js';
+import { FogComponent } from '../components/FogComponent.js';
 
 const COMPONENT_REGISTRY = {
   TagComponent, TransformComponent, MeshComponent, LightComponent,
   TriggerComponent, PlayerStartComponent, GroupComponent, ParentComponent,
-  CameraComponent,
+  CameraComponent, FogComponent,
 };
 
 export class Runtime {
@@ -85,8 +86,6 @@ export class Runtime {
     this.#renderer.shadowMap.enabled = true;
     this.#renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     viewport.appendChild(this.#renderer.domElement);
-
-    this.#scene.add(new THREE.AmbientLight(0xffffff, 0.3));
 
     // ECS
     this.#world = new World();

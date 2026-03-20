@@ -32,21 +32,20 @@ export class PrefabsPanel {
         <div class="prefab-section-title">Lights</div>
         <div class="prefab-grid">
           <button class="prefab-btn" data-spawn="pointlight"><span class="icon">&#128161;</span>Point</button>
-          <button class="prefab-btn" data-spawn="dirlight"><span class="icon">&#9728;</span>Directional</button>
+          <button class="prefab-btn" data-spawn="dirlight"><span class="icon">&#9728;</span>Dir</button>
           <button class="prefab-btn" data-spawn="spotlight"><span class="icon">&#128294;</span>Spot</button>
         </div>
-        <div class="prefab-section-title">Camera</div>
+        <div class="prefab-section-title">Other</div>
         <div class="prefab-grid">
           <button class="prefab-btn" data-spawn="camera"><span class="icon">&#127909;</span>Camera</button>
+          <button class="prefab-btn" data-spawn="spheretrigger"><span class="icon">&#128993;</span>SphereTrig</button>
+          <button class="prefab-btn" data-spawn="boxtrigger"><span class="icon">&#128243;</span>BoxTrig</button>
+          <button class="prefab-btn" data-spawn="playerstart"><span class="icon">&#128694;</span>Player</button>
         </div>
-        <div class="prefab-section-title">Triggers</div>
+        <div class="prefab-section-title">Environment</div>
         <div class="prefab-grid">
-          <button class="prefab-btn" data-spawn="spheretrigger"><span class="icon">&#128993;</span>SphereTrigger</button>
-          <button class="prefab-btn" data-spawn="boxtrigger"><span class="icon">&#128243;</span>BoxTrigger</button>
-        </div>
-        <div class="prefab-section-title">Gameplay</div>
-        <div class="prefab-grid">
-          <button class="prefab-btn" data-spawn="playerstart"><span class="icon">&#128694;</span>PlayerStart</button>
+          <button class="prefab-btn" data-spawn="ambientlight"><span class="icon">&#127774;</span>Ambient</button>
+          <button class="prefab-btn" data-spawn="fog"><span class="icon">&#127568;</span>Fog</button>
         </div>
       </div>
     `;
@@ -71,6 +70,8 @@ export class PrefabsPanel {
       spheretrigger: () => this.#editor.spawnSphereTrigger(),
       boxtrigger: () => this.#editor.spawnBoxTrigger(),
       playerstart: () => this.#editor.spawnPlayerStart(),
+      ambientlight: () => this.#editor.spawnAmbientLight(),
+      fog: () => this.#editor.spawnFog(),
     };
 
     this.#el.addEventListener('click', (e) => {

@@ -12,6 +12,7 @@ import { PlayerStartComponent } from '../components/PlayerStartComponent.js';
 import { GroupComponent } from '../components/GroupComponent.js';
 import { ParentComponent } from '../components/ParentComponent.js';
 import { CameraComponent } from '../components/CameraComponent.js';
+import { FogComponent } from '../components/FogComponent.js';
 
 const COMPONENT_REGISTRY = {
   TagComponent,
@@ -23,6 +24,7 @@ const COMPONENT_REGISTRY = {
   GroupComponent,
   ParentComponent,
   CameraComponent,
+  FogComponent,
 };
 
 function uuid() {
@@ -80,22 +82,6 @@ export class Editor {
 
     const grid = new THREE.GridHelper(20, 20, 0x444444, 0x2a2a2a);
     this.threeScene.add(grid);
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
-    this.threeScene.add(ambientLight);
-    // Editor fill light (not a scene entity)
-    const editorFill = new THREE.DirectionalLight(0xffffff, 0.3);
-    editorFill.position.set(5, 10, 5);
-    editorFill.castShadow = true;
-    editorFill.shadow.mapSize.setScalar(4096);
-    editorFill.shadow.camera.near = 0.1;
-    editorFill.shadow.camera.far = 200;
-    editorFill.shadow.camera.left = -20;
-    editorFill.shadow.camera.right = 20;
-    editorFill.shadow.camera.top = 20;
-    editorFill.shadow.camera.bottom = -20;
-    editorFill.shadow.bias = -0.0003;
-    editorFill.shadow.normalBias = 0.02;
-    this.threeScene.add(editorFill);
 
     this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
     this.orbitControls.enableDamping = true;
@@ -163,8 +149,6 @@ export class Editor {
     const delta = this.#clock.getDelta();
     this.world.update(delta);
     this.orbitControls.update();
-    // Update matrixWorld so helpers and camera preview use current transforms
-    this.threeScene.updateMatrixWorld();
     this.#syncHelpers();
     this.renderer.render(this.threeScene, this.camera);
     this.#updateCameraPreview();
@@ -252,6 +236,9 @@ export class Editor {
       for (const [, obj] of this.renderSystem.entityObjects) {
         this.#applyViewModeToObject(obj, mode);
       }
+      this.renderSystem.setLightingEnabled(false);
+    } else {
+      this.renderSystem.setLightingEnabled(true);
     }
     this.emit('viewMode:changed', mode);
   }
@@ -506,9 +493,9 @@ export class Editor {
   spawnCapsule() { return this.spawnEntity('Capsule', id => this.world.addComponent(id, new MeshComponent('capsule', 0xcc4aff))); }
   spawnPlane() { return this.spawnEntity('Plane', id => this.world.addComponent(id, new MeshComponent('plane', 0x888888))); }
   // Use higher default intensities so lights are visible in physical rendering mode
-  spawnPointLight() { return this.spawnEntity('PointLight', id => this.world.addComponent(id, new LightComponent('point', 0xffffff, 100, 1))); }
-  spawnDirectionalLight() { return this.spawnEntity('DirectionalLight', id => this.world.addComponent(id, new LightComponent('directional', 0xffffff, 3))); }
-  spawnSpotLight() { return this.spawnEntity('SpotLight', id => this.world.addComponent(id, new LightComponent('spot', 0xffffff, 100, 1))); }
+  spawnPointLight() { return this.spawnEntity('PointLight', id => this.world.addComponent(id, new LightComponent('point', 0xffffff, 1, 1))); }
+  spawnDirectionalLight() { return this.spawnEntity('DirectionalLight', id => this.world.addComponent(id, new LightComponent('directional', 0xffffff, 1))); }
+  spawnSpotLight() { return this.spawnEntity('SpotLight', id => this.world.addComponent(id, new LightComponent('spot', 0xffffff, 1, 1))); }
   spawnSphereTrigger() { return this.spawnEntity('SphereTrigger', id => this.world.addComponent(id, new TriggerComponent('sphere', 1))); }
   spawnBoxTrigger() { return this.spawnEntity('BoxTrigger', id => this.world.addComponent(id, new TriggerComponent('box', 1))); }
   spawnPlayerStart() { return this.spawnEntity('PlayerStart', id => this.world.addComponent(id, new PlayerStartComponent())); }
@@ -517,8 +504,37 @@ export class Editor {
       this.world.addComponent(id, new CameraComponent());
     });
   }
+  spawnAmbientLight() { return this.spawnEntity('AmbientLight', id => this.world.addComponent(id, new LightComponent('ambient', 0xffffff, 0.5))); }
+  spawnFog() { return this.spawnEntity('Fog', id => this.world.addComponent(id, new FogComponent(0xaaaaaa, 10, 100))); }
+
+  // Returns true for entity types where scale doesn't apply (camera, lights)
+  isScaleLocked(entityId) {
+    if (entityId === null) return false;
+    return this.world.hasComponent(entityId, CameraComponent) ||
+           this.world.hasComponent(entityId, LightComponent);
+  }
+
+  isEntityVisible(entityId) {
+    return this.renderSystem.getObject3D(entityId)?.visible !== false;
+  }
+
+  toggleEntityVisibility(entityId) {
+    const obj = this.renderSystem.getObject3D(entityId);
+    if (!obj) return;
+    obj.visible = !obj.visible;
+    this.emit('hierarchy:changed');
+  }
 
   deleteEntity(entityId) {
+    // Guard: at least one camera must remain in the scene
+    if (this.world.getComponent(entityId, CameraComponent)) {
+      const camCount = this.world.entities.filter(id => this.world.getComponent(id, CameraComponent)).length;
+      if (camCount <= 1) {
+        this.emit('notification', 'Every scene must have at least one camera.');
+        return;
+      }
+    }
+
     if (this.selectedEntityId === entityId) this.selectEntity(null);
     this.selectedEntityIds.delete(entityId);
 

@@ -31,6 +31,8 @@ export class TopBar {
     this.#el = document.createElement('div');
     this.#el.className = 'editor-topbar';
     parent.appendChild(this.#el);
+    // Apply persisted theme
+    document.documentElement.dataset.theme = localStorage.getItem('editorTheme') ?? 'default';
     this.#render();
     document.addEventListener('keydown', this.#keyHandler);
     document.addEventListener('click', this.#docClickHandler);
@@ -79,10 +81,18 @@ export class TopBar {
 
   #buildEditorMenu() {
     this.#buildDropdown('tbtn-editor', [
-      { label: 'Theme', action: 'editor-theme' },
+      { label: 'Theme: Toggle (Default / Oldschool)', action: 'editor-theme' },
       { label: 'Language', action: 'editor-language' },
       { label: 'Shortcuts', action: 'editor-shortcuts' },
     ]);
+  }
+
+  #cycleTheme() {
+    const current = document.documentElement.dataset.theme ?? 'default';
+    const next = current === 'default' ? 'oldschool' : 'default';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('editorTheme', next);
+    showToast(`Theme: ${next === 'oldschool' ? 'Oldschool' : 'Default'}`, 'success');
   }
 
   #buildSceneMenu() {
@@ -220,7 +230,7 @@ export class TopBar {
       case 'save-project': this.#saveProject(); break;
       case 'export-project': this.#exportProject(); break;
       case 'export-game': this.#exportGame(); break;
-      case 'editor-theme':
+      case 'editor-theme': this.#cycleTheme(); break;
       case 'editor-language':
       case 'editor-shortcuts':
       case 'settings': showToast('Coming soon'); break;
@@ -296,102 +306,158 @@ export class TopBar {
     const gameDataJson = JSON.stringify(project);
 
     const runtimeCode = `
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+(async () => {
+  const GAME_DATA = ${gameDataJson};
+  const sceneIdx = GAME_DATA.currentSceneIndex ?? 0;
+  const sceneData = GAME_DATA.scenes[sceneIdx];
 
-document.getElementById('loading').style.display = 'none';
+  const scene = new THREE.Scene();
+  if (sceneData?.background) scene.background = new THREE.Color(sceneData.background);
+  else scene.background = new THREE.Color(0x111111);
 
-const GAME_DATA = ${gameDataJson};
+  const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1000);
+  camera.position.set(0, 2, 5);
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a1a);
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-
-const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1000);
-camera.position.set(5, 5, 8);
-camera.lookAt(0, 0, 0);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(devicePixelRatio);
-renderer.shadowMap.enabled = true;
-document.body.appendChild(renderer.domElement);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.1;
-
-const sceneIdx = GAME_DATA.currentSceneIndex ?? 0;
-const sceneData = GAME_DATA.scenes[sceneIdx];
-if (sceneData?.worldData) loadScene(sceneData.worldData);
-
-function loadScene(worldData) {
-  const objs = new Map();
-  for (const { id, components: c } of worldData.entities) {
-    let obj = null;
-    if ('GroupComponent' in c) {
-      obj = new THREE.Group();
-    } else if (c.MeshComponent) {
-      const geoFn = {
-        box: () => new THREE.BoxGeometry(1,1,1),
-        sphere: () => new THREE.SphereGeometry(0.5,32,32),
-        cone: () => new THREE.ConeGeometry(0.5,1,32),
-        cylinder: () => new THREE.CylinderGeometry(0.5,0.5,1,32),
-        capsule: () => new THREE.CapsuleGeometry(0.3,0.6,4,16),
-        plane: () => new THREE.PlaneGeometry(1,1),
-      };
-      const geo = (geoFn[c.MeshComponent.type] ?? geoFn.box)();
-      const mat = new THREE.MeshStandardMaterial({ color: c.MeshComponent.color });
-      obj = new THREE.Mesh(geo, mat);
-    } else if (c.LightComponent) {
-      const grp = new THREE.Group();
-      const lc = c.LightComponent;
-      let light;
-      if (lc.type === 'directional') light = new THREE.DirectionalLight(lc.color, lc.intensity);
-      else if (lc.type === 'spot') light = new THREE.SpotLight(lc.color, lc.intensity);
-      else light = new THREE.PointLight(lc.color, lc.intensity);
-      grp.add(light);
-      obj = grp;
-    } else if ('PlayerStartComponent' in c && c.TransformComponent) {
-      const p = c.TransformComponent.position;
-      camera.position.set(p[0], p[1] + 2, p[2] + 6);
-      camera.lookAt(p[0], p[1], p[2]);
-      controls.target.set(p[0], p[1], p[2]);
-      continue;
-    } else if ('TriggerComponent' in c) {
-      continue;
-    } else {
-      obj = new THREE.Object3D();
-    }
-    if (c.TransformComponent && obj) {
-      const t = c.TransformComponent;
-      obj.position.fromArray(t.position);
-      obj.rotation.set(t.rotation[0], t.rotation[1], t.rotation[2], t.rotation[3]);
-      obj.scale.fromArray(t.scale);
-    }
-    objs.set(id, obj);
-  }
-  for (const { id, components: c } of worldData.entities) {
-    const obj = objs.get(id);
-    if (!obj) continue;
-    if (c.ParentComponent) {
-      const parent = objs.get(c.ParentComponent.parentId);
-      if (parent) { parent.add(obj); continue; }
-    }
-    scene.add(obj);
-  }
-}
-
-window.addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
+  const renderer = new THREE.WebGPURenderer({ antialias: true });
+  await renderer.init();
   renderer.setSize(innerWidth, innerHeight);
-});
+  renderer.setPixelRatio(devicePixelRatio);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  document.body.appendChild(renderer.domElement);
 
-(function animate() {
-  requestAnimationFrame(animate);
-  controls.update();
-  renderer.render(scene, camera);
+  if (sceneData?.worldData) loadScene(sceneData.worldData);
+
+  function loadScene(worldData) {
+    const objs = new Map();
+    for (const { id, components: c } of worldData.entities) {
+      let obj = null;
+      if ('GroupComponent' in c) {
+        obj = new THREE.Group();
+      } else if (c.MeshComponent) {
+        const geoFn = {
+          box: () => new THREE.BoxGeometry(1,1,1),
+          sphere: () => new THREE.SphereGeometry(0.5,32,32),
+          cone: () => new THREE.ConeGeometry(0.5,1,32),
+          cylinder: () => new THREE.CylinderGeometry(0.5,0.5,1,32),
+          capsule: () => new THREE.CapsuleGeometry(0.3,0.6,4,16),
+          plane: () => new THREE.PlaneGeometry(1,1),
+        };
+        const geo = (geoFn[c.MeshComponent.type] ?? geoFn.box)();
+        const mat = new THREE.MeshStandardMaterial({ color: c.MeshComponent.color });
+        obj = new THREE.Mesh(geo, mat);
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      } else if (c.LightComponent) {
+        const lc = c.LightComponent;
+        if (lc.type === 'ambient') {
+          const light = new THREE.AmbientLight(lc.color, lc.intensity);
+          scene.add(light);
+          continue;
+        }
+        const grp = new THREE.Group();
+        let light;
+        if (lc.type === 'directional') {
+          light = new THREE.DirectionalLight(lc.color, lc.intensity);
+          light.shadow.mapSize.setScalar(2048);
+          light.shadow.camera.near = 0.1; light.shadow.camera.far = 100;
+          light.shadow.camera.left = -15; light.shadow.camera.right = 15;
+          light.shadow.camera.top = 15; light.shadow.camera.bottom = -15;
+          const t = new THREE.Object3D(); t.position.set(0,-1,0); grp.add(t); light.target = t;
+        } else if (lc.type === 'spot') {
+          light = new THREE.SpotLight(lc.color, lc.intensity, lc.distance ?? 1);
+          light.angle = Math.PI / 6; light.penumbra = 0.2;
+          light.shadow.mapSize.setScalar(1024);
+          const t = new THREE.Object3D(); t.position.set(0,-1,0); grp.add(t); light.target = t;
+        } else {
+          light = new THREE.PointLight(lc.color, lc.intensity, lc.distance ?? 1, 2);
+          light.shadow.mapSize.setScalar(512);
+        }
+        light.castShadow = true;
+        light.shadow.bias = -0.0003;
+        grp.add(light);
+        obj = grp;
+      } else if (c.FogComponent) {
+        const fc = c.FogComponent;
+        scene.fog = new THREE.Fog(fc.color, fc.near, fc.far);
+        continue;
+      } else if (c.CameraComponent) {
+        const cc = c.CameraComponent;
+        camera.fov = cc.fov ?? 60;
+        camera.near = cc.near ?? 0.1;
+        camera.far = cc.far ?? 1000;
+        camera.updateProjectionMatrix();
+        if (c.TransformComponent) {
+          const t = c.TransformComponent;
+          camera.position.fromArray(t.position);
+          camera.rotation.set(t.rotation[0], t.rotation[1], t.rotation[2], t.rotation[3]);
+        }
+        continue;
+      } else if ('TriggerComponent' in c || 'PlayerStartComponent' in c) {
+        continue;
+      } else {
+        obj = new THREE.Object3D();
+      }
+      if (c.TransformComponent && obj) {
+        const t = c.TransformComponent;
+        obj.position.fromArray(t.position);
+        obj.rotation.set(t.rotation[0], t.rotation[1], t.rotation[2], t.rotation[3]);
+        obj.scale.fromArray(t.scale);
+      }
+      objs.set(id, obj);
+    }
+    for (const { id, components: c } of worldData.entities) {
+      const obj = objs.get(id);
+      if (!obj) continue;
+      if (c.ParentComponent) {
+        const parent = objs.get(c.ParentComponent.parentId);
+        if (parent) { parent.add(obj); continue; }
+      }
+      scene.add(obj);
+    }
+  }
+
+  // Extract initial yaw/pitch from camera rotation
+  const euler = new THREE.Euler();
+  euler.setFromQuaternion(camera.quaternion, 'YXZ');
+  let pitch = euler.x, yaw = euler.y;
+  const keys = {};
+
+  document.addEventListener('keydown', e => { keys[e.code] = true; if (e.key === 'Escape' && document.pointerLockElement) document.exitPointerLock(); });
+  document.addEventListener('keyup', e => { keys[e.code] = false; });
+  document.addEventListener('mousemove', e => {
+    if (document.pointerLockElement !== renderer.domElement) return;
+    yaw -= e.movementX * 0.002;
+    pitch -= e.movementY * 0.002;
+    pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
+    camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+  });
+  renderer.domElement.addEventListener('click', () => renderer.domElement.requestPointerLock());
+
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  const clock = new THREE.Clock();
+  document.getElementById('loading').style.display = 'none';
+
+  (function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    const speed = 5 * delta;
+    const fwd = new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw)*Math.cos(pitch));
+    const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    const up = new THREE.Vector3(0, 1, 0);
+    if (keys['KeyW']) camera.position.addScaledVector(fwd, speed);
+    if (keys['KeyS']) camera.position.addScaledVector(fwd, -speed);
+    if (keys['KeyA']) camera.position.addScaledVector(right, -speed);
+    if (keys['KeyD']) camera.position.addScaledVector(right, speed);
+    if (keys['KeyE']) camera.position.addScaledVector(up, speed);
+    if (keys['KeyQ']) camera.position.addScaledVector(up, -speed);
+    renderer.render(scene, camera);
+  })();
 })();
 `;
 
@@ -406,16 +472,19 @@ window.addEventListener('resize', () => {
     body{background:#000;overflow:hidden}
     canvas{display:block}
     #loading{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;color:#fff;font-family:system-ui;font-size:20px;letter-spacing:2px}
-    #hud{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.3);font-family:system-ui;font-size:11px;pointer-events:none;white-space:nowrap}
+    #hud{position:fixed;bottom:12px;right:12px;color:rgba(255,255,255,0.3);font-family:system-ui;font-size:11px;pointer-events:none;white-space:nowrap;text-align:right;line-height:1.8}
   </style>
 </head>
 <body>
   <div id="loading">Loading...</div>
-  <div id="hud">${sceneName} &nbsp;|&nbsp; Orbit: drag &nbsp;|&nbsp; Zoom: scroll</div>
+  <div id="hud">${this.#esc(sceneName)}<br>Click: mouse look &nbsp;|&nbsp; WASD: move &nbsp;|&nbsp; Q/E: down/up &nbsp;|&nbsp; Esc: unlock</div>
   <script type="importmap">
-  {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/"}}
+  {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.webgpu.js","three/webgpu":"https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.webgpu.js"}}
   </script>
-  <script type="module">${runtimeCode}</script>
+  <script type="module">
+  import * as THREE from 'three';
+  ${runtimeCode}
+  </script>
 </body>
 </html>`;
 
