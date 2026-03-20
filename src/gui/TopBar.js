@@ -101,7 +101,7 @@ export class TopBar {
     themeRow.innerHTML = `<span>Theme</span>`;
     const themeSelect = document.createElement('select');
     themeSelect.className = 'topbar-theme-select';
-    [['default', 'Default'], ['oldschool', 'Oldschool']].forEach(([val, label]) => {
+    [['default', 'Default'], ['flat', 'Flat']].forEach(([val, label]) => {
       const opt = document.createElement('option');
       opt.value = val; opt.textContent = label;
       if ((localStorage.getItem('editorTheme') ?? 'default') === val) opt.selected = true;
@@ -159,7 +159,8 @@ export class TopBar {
         const isActive = i === active;
         const item = document.createElement('div');
         item.className = 'topbar-dropdown-item' + (isActive ? ' scene-active' : '');
-        item.innerHTML = `<span style="width:14px;display:inline-block;color:var(--accent)">${isActive ? '&#10003;' : ''}</span> ${this.#esc(scenes[i].name)}`;
+        item.style.cssText = 'display:flex;align-items:center;';
+        item.innerHTML = `${this.#esc(scenes[i].name)}<span style="margin-left:auto;padding-left:8px;color:var(--accent)">${isActive ? '&#10003;' : ''}</span>`;
         const idx = i;
         item.addEventListener('click', (e) => {
           e.stopPropagation();

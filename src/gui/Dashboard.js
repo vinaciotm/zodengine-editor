@@ -72,9 +72,13 @@ export class Dashboard {
     importCard.addEventListener('click', () => this.#importProject());
     grid.appendChild(importCard);
 
-    for (const project of projects) {
-      grid.insertBefore(this.#makeCard(project), newCard);
-    }
+    projects.forEach((project, i) => {
+      const card = this.#makeCard(project);
+      card.style.animationDelay = `${0.05 + i * 0.06}s`;
+      grid.insertBefore(card, newCard);
+    });
+    newCard.style.animationDelay = `${0.05 + projects.length * 0.06}s`;
+    importCard.style.animationDelay = `${0.05 + (projects.length + 1) * 0.06}s`;
   }
 
   #makeCard(project) {
@@ -164,7 +168,7 @@ export class Dashboard {
     themeRow.innerHTML = `<span>Theme</span>`;
     const themeSelect = document.createElement('select');
     themeSelect.className = 'topbar-theme-select';
-    [['default', 'Default'], ['oldschool', 'Oldschool']].forEach(([val, label]) => {
+    [['default', 'Default'], ['flat', 'Flat']].forEach(([val, label]) => {
       const opt = document.createElement('option');
       opt.value = val; opt.textContent = label;
       if ((localStorage.getItem('editorTheme') ?? 'default') === val) opt.selected = true;

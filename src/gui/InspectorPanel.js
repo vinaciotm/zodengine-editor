@@ -15,18 +15,33 @@ export class InspectorPanel {
 
   constructor(editor) { this.#editor = editor; }
 
+  #contentEl = null;
+
   mount(parent) {
     this.#el = document.createElement('div');
     this.#el.className = 'panel';
-    this.#el.style.cssText = 'flex:1;min-height:0;';
+    this.#el.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column;';
     parent.appendChild(this.#el);
+
+    // Persistent header (survives re-renders)
+    const header = document.createElement('div');
+    header.className = 'panel-header';
+    header.innerHTML = '<span class="ph-icon">&#128196;</span><span class="ph-text"> Detalhes</span>';
+    this.#el.appendChild(header);
+
+    this.#contentEl = document.createElement('div');
+    this.#contentEl.className = 'panel-content';
+    this.#contentEl.id = 'insp-content';
+    this.#el.appendChild(this.#contentEl);
+
+    makeCollapsiblePanel(header, this.#contentEl, true);
+
     this.#render();
     this.#unsubs.push(
       this.#editor.on('entity:selected', () => this.#render()),
       this.#editor.on('entity:changed', () => this.#renderTransformValues()),
       this.#editor.on('scene:switched', () => this.#render()),
       this.#editor.on('scenes:changed', () => {
-        // Re-render only if showing scene settings (nothing selected)
         if (this.#editor.selectedEntityId === null) this.#render();
       }),
     );
@@ -38,13 +53,9 @@ export class InspectorPanel {
   }
 
   #render() {
-    this.#el.innerHTML = '<div class="panel-header"><span>&#128196; Detalhes</span></div><div class="panel-content" id="insp-content"></div>';
-    makeCollapsiblePanel(
-      this.#el.querySelector('.panel-header'),
-      this.#el.querySelector('#insp-content'),
-      true
-    );
-    const content = this.#el.querySelector('#insp-content');
+    const content = this.#contentEl;
+    if (!content) return;
+    content.innerHTML = '';
     const entityId = this.#editor.selectedEntityId;
 
     if (entityId === null) {

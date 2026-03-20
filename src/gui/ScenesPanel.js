@@ -17,7 +17,7 @@ export class ScenesPanel {
     const header = document.createElement('div');
     header.className = 'panel-header';
     header.innerHTML = `
-      <span>&#127916; Cenários</span>
+      <span class="ph-icon">&#127916;</span><span class="ph-text"> Cenários</span>
       <div class="panel-header-actions">
         <button class="btn-icon btn" id="scene-add" title="Add Scene">+</button>
       </div>

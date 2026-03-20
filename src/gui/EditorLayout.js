@@ -39,11 +39,12 @@ export class EditorLayout {
     topBar.mount(el);
     this.#panels.push(topBar);
 
+    // Body row (left-center + right)
     const body = document.createElement('div');
     body.className = 'editor-body';
     el.appendChild(body);
 
-    // Left-center wrapper (column: main row + footer)
+    // Left-center wrapper (column: main row only, no footer here)
     const leftCenter = document.createElement('div');
     leftCenter.className = 'editor-left-center';
     body.appendChild(leftCenter);
@@ -52,14 +53,52 @@ export class EditorLayout {
     mainRow.className = 'editor-main-row';
     leftCenter.appendChild(mainRow);
 
+    // Left sidebar: Cenários (top, fixed height) + Objetos (flex:1)
     const left = document.createElement('div');
     left.className = 'editor-left';
     mainRow.appendChild(left);
+
+    const scenesWrap = document.createElement('div');
+    scenesWrap.className = 'left-scenes-wrap';
+    left.appendChild(scenesWrap);
+
+    const scenes = new ScenesPanel(editor);
+    scenes.mount(scenesWrap);
+    this.#panels.push(scenes);
 
     const hierarchy = new HierarchyPanel(editor);
     hierarchy.mount(left);
     this.#panels.push(hierarchy);
 
+    // Cenários + Objetos collapse state → narrow mode
+    let scenesOpen = true;
+    let hierOpen = true;
+
+    const updateNarrow = () => {
+      left.classList.toggle('narrow', !scenesOpen && !hierOpen);
+    };
+
+    // Hook Cenários header: track state + narrow
+    const scenesHeader = scenesWrap.querySelector('.panel-header');
+    scenesHeader?.addEventListener('click', (e) => {
+      if (e.target.closest('.panel-header-actions')) return;
+      const content = scenesWrap.querySelector('.panel-content');
+      scenesOpen = !content || content.style.display !== 'none';
+      updateNarrow();
+    });
+
+    // Hook Objetos header: narrow mode only
+    const allHeaders = left.querySelectorAll('.panel-header');
+    const hierHeader = [...allHeaders].find(h => !scenesWrap.contains(h));
+    hierHeader?.addEventListener('click', (e) => {
+      if (e.target.closest('.panel-header-actions')) return;
+      const panel = [...left.children].find(el => el !== scenesWrap);
+      const content = panel?.querySelector('.panel-content');
+      hierOpen = !content || content.style.display !== 'none';
+      updateNarrow();
+    });
+
+    // Center (viewport)
     const center = document.createElement('div');
     center.className = 'editor-center';
     mainRow.appendChild(center);
@@ -81,18 +120,10 @@ export class EditorLayout {
 
     editor.on('notification', msg => showToast(msg, 'error'));
 
-    // Footer: Cenários (left) + Assets (rest)
+    // Footer: under left+center only (Assets), inside leftCenter
     const footer = document.createElement('div');
     footer.className = 'editor-footer';
     leftCenter.appendChild(footer);
-
-    const scenesWrap = document.createElement('div');
-    scenesWrap.className = 'editor-footer-scenes';
-    footer.appendChild(scenesWrap);
-
-    const scenes = new ScenesPanel(editor);
-    scenes.mount(scenesWrap);
-    this.#panels.push(scenes);
 
     const assetsWrap = document.createElement('div');
     assetsWrap.className = 'editor-footer-assets';
@@ -102,7 +133,7 @@ export class EditorLayout {
     prefabs.mount(assetsWrap);
     this.#panels.push(prefabs);
 
-    // Right: Detalhes
+    // Right: Detalhes (full height sibling of leftCenter)
     const right = document.createElement('div');
     right.className = 'editor-right';
     body.appendChild(right);
@@ -110,6 +141,16 @@ export class EditorLayout {
     const inspector = new InspectorPanel(editor);
     inspector.mount(right);
     this.#panels.push(inspector);
+
+    // Detalhes narrow mode on collapse
+    right.addEventListener('click', (e) => {
+      if (!e.target.closest('.panel-header')) return;
+      if (e.target.closest('.panel-header-actions')) return;
+      const content = right.querySelector('#insp-content');
+      if (!content) return;
+      const isOpen = content.style.display !== 'none';
+      right.classList.toggle('narrow', !isOpen);
+    });
   }
 
   async #startRuntime() {

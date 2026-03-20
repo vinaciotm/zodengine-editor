@@ -26,7 +26,7 @@ export class HierarchyPanel {
 
     const header = document.createElement('div');
     header.className = 'panel-header';
-    header.innerHTML = `<span>&#128279; Objetos</span>`;
+    header.innerHTML = `<span class="ph-icon">&#128279;</span><span class="ph-text"> Objetos</span>`;
     this.#el.appendChild(header);
 
     this.#contentEl = document.createElement('div');
@@ -65,6 +65,11 @@ export class HierarchyPanel {
     }
 
     const roots = entities.filter(id => !editor.world.hasComponent(id, ParentComponent));
+    roots.sort((a, b) => {
+      const aG = editor.world.hasComponent(a, GroupComponent) ? 0 : 1;
+      const bG = editor.world.hasComponent(b, GroupComponent) ? 0 : 1;
+      return aG - bG;
+    });
 
     const renderEntity = (id, depth = 0) => {
       const tag = editor.world.getComponent(id, TagComponent);
