@@ -84,8 +84,7 @@ export class Editor {
     this.threeScene.add(grid);
 
     this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.orbitControls.enableDamping = true;
-    this.orbitControls.dampingFactor = 0.1;
+    this.orbitControls.enableDamping = false;
 
     this.transformControls = new TransformControls(this.camera, this.renderer.domElement);
     this.transformControls.setMode(this.transformMode);

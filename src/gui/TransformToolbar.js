@@ -29,7 +29,10 @@ export class TransformToolbar {
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
       if (e.key === '1') this.#editor.setTransformMode('translate');
       else if (e.key === '2') this.#editor.setTransformMode('rotate');
-      else if (e.key === '3') this.#editor.setTransformMode('scale');
+      else if (e.key === '3') {
+        const id = this.#editor.selectedEntityId;
+        if (!this.#editor.isScaleLocked(id)) this.#editor.setTransformMode('scale');
+      }
       else if (e.key === '4') this.#editor.setViewMode('default');
       else if (e.key === '5') this.#editor.setViewMode('unlit');
       else if (e.key === '6') this.#editor.setViewMode('wireframe');

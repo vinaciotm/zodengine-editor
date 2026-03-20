@@ -11,7 +11,7 @@ export class ScenesPanel {
   mount(parent) {
     this.#el = document.createElement('div');
     this.#el.className = 'panel';
-    this.#el.style.cssText = 'flex:1;max-height:220px;border-top:1px solid var(--border);';
+    this.#el.style.cssText = 'flex-shrink:0;border-top:1px solid var(--border);';
     parent.appendChild(this.#el);
 
     const header = document.createElement('div');

@@ -47,6 +47,9 @@ export class RenderSystem {
   }
 
   rebuildAll() {
+    // Clear scene-level effects that are driven by entity components
+    this.scene.fog = null;
+
     for (const obj of this.entityObjects.values()) {
       if (obj.parent) obj.parent.remove(obj);
       else this.scene.remove(obj);

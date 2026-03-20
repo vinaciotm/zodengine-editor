@@ -4,6 +4,8 @@ export class Dashboard {
   #el = null;
   #projectManager = null;
   #onOpen = null;
+  #openGear = null;
+  #docClick = () => this.#closeGear();
 
   constructor(projectManager, onOpen) {
     this.#projectManager = projectManager;
@@ -14,30 +16,46 @@ export class Dashboard {
     this.#el = document.createElement('div');
     this.#el.className = 'dashboard';
     parent.appendChild(this.#el);
+
+    // Apply persisted theme
+    document.documentElement.dataset.theme = localStorage.getItem('editorTheme') ?? 'default';
+
+    document.addEventListener('click', this.#docClick);
     this.#render();
   }
 
-  destroy() { this.#el?.remove(); }
+  destroy() {
+    document.removeEventListener('click', this.#docClick);
+    document.querySelectorAll('.project-card-gear-dropdown').forEach(el => el.remove());
+    this.#el?.remove();
+  }
+
+  #closeGear() {
+    if (this.#openGear) {
+      this.#openGear.classList.remove('open');
+      this.#openGear = null;
+    }
+  }
 
   #render() {
     const pm = this.#projectManager;
     const projects = pm.getProjects();
 
     this.#el.innerHTML = `
-      <div class="dashboard-header">
-        <h1>&#9650; Three.js ECS Editor</h1>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <button class="btn btn-secondary" id="btn-import">&#128229; Import Project</button>
-          <span style="color:var(--text-dim);font-size:12px;">Game Engine Editor</span>
+      <div class="db-topbar">
+        <div class="db-topbar-menu" id="db-editor-btn-wrap">
+          <button class="db-topbar-btn" id="db-editor-btn">Editor</button>
         </div>
+        <span class="db-topbar-title">Zod Engine</span>
+        <div class="db-topbar-right"></div>
       </div>
       <div class="dashboard-body">
-        <div class="dashboard-section-title">&#128193; Projects</div>
+        <div class="dashboard-section-title">Projects</div>
         <div class="project-grid" id="project-grid"></div>
       </div>
     `;
 
-    this.#el.querySelector('#btn-import').addEventListener('click', () => this.#importProject());
+    this.#buildEditorMenu();
 
     const grid = this.#el.querySelector('#project-grid');
 
@@ -48,36 +66,128 @@ export class Dashboard {
     grid.appendChild(newCard);
 
     for (const project of projects) {
-      const card = document.createElement('div');
-      card.className = 'project-card';
-      // Find the most recent scene thumbnail
-      const thumb = project.scenes?.find(s => s.thumbnail)?.thumbnail ?? null;
-      const thumbHtml = thumb ? `<img class="project-card-thumb" src="${thumb}" alt="preview" />` : '';
-      card.innerHTML = `
-        ${thumbHtml}
-        <div class="project-card-name">${this.#esc(project.name)}</div>
-        <div class="project-card-date">&#128197; ${new Date(project.createdAt).toLocaleDateString()}</div>
-        <div class="project-card-scenes">&#127916; ${project.scenes?.length ?? 0} scene(s)</div>
-        <div class="project-card-actions">
-          <button class="btn btn-primary" data-open="${project.id}">Open</button>
-          <button class="btn btn-secondary" data-rename="${project.id}">Rename</button>
-          <button class="btn btn-secondary" data-export="${project.id}">Export</button>
-          <button class="btn btn-danger" data-delete="${project.id}">&#128465;</button>
-        </div>
-      `;
-      card.addEventListener('dblclick', () => this.#onOpen(project));
-      card.addEventListener('click', (e) => {
-        const openId = e.target.dataset.open;
-        const renameId = e.target.dataset.rename;
-        const deleteId = e.target.dataset.delete;
-        const exportId = e.target.dataset.export;
-        if (openId) { e.stopPropagation(); this.#onOpen(pm.getProject(openId)); }
-        else if (renameId) { e.stopPropagation(); this.#renameProject(renameId); }
-        else if (deleteId) { e.stopPropagation(); this.#deleteProject(deleteId); }
-        else if (exportId) { e.stopPropagation(); this.#exportProject(exportId); }
-      });
-      grid.insertBefore(card, newCard);
+      grid.insertBefore(this.#makeCard(project), newCard);
     }
+  }
+
+  #makeCard(project) {
+    const pm = this.#projectManager;
+    const thumb = project.scenes?.find(s => s.thumbnail)?.thumbnail ?? null;
+    const scenesCount = project.scenes?.length ?? 0;
+    const dateStr = new Date(project.updatedAt ?? project.createdAt).toLocaleDateString();
+
+    const card = document.createElement('div');
+    card.className = 'project-card';
+
+    const thumbEl = document.createElement('div');
+    thumbEl.className = 'project-card-thumb';
+    if (thumb) {
+      thumbEl.innerHTML = `<img src="${thumb}" alt="preview" />`;
+    } else {
+      thumbEl.innerHTML = `<span class="project-card-no-thumb">&#128196;</span>`;
+    }
+
+    const gearWrap = document.createElement('div');
+    gearWrap.className = 'project-card-gear-wrap';
+    gearWrap.innerHTML = `<button class="project-card-gear" title="Options">&#9881;</button>`;
+
+    const gearDropdown = document.createElement('div');
+    gearDropdown.className = 'project-card-gear-dropdown';
+    gearDropdown.innerHTML = `
+      <div class="gear-item" data-action="rename">Rename</div>
+      <div class="gear-item" data-action="export">Export</div>
+      <div class="gear-item danger" data-action="delete">Delete</div>
+    `;
+    document.body.appendChild(gearDropdown);
+
+    gearWrap.querySelector('.project-card-gear').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = gearDropdown.classList.contains('open');
+      this.#closeGear();
+      if (!isOpen) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        gearDropdown.style.top = (rect.bottom + 4) + 'px';
+        gearDropdown.style.left = (rect.right - 130) + 'px';
+        gearDropdown.classList.add('open');
+        this.#openGear = gearDropdown;
+      }
+    });
+
+    gearDropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const action = e.target.dataset.action;
+      this.#closeGear();
+      if (action === 'rename') this.#renameProject(project.id);
+      else if (action === 'export') this.#exportProject(project.id);
+      else if (action === 'delete') this.#deleteProject(project.id);
+    });
+
+    thumbEl.appendChild(gearWrap);
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'project-card-name';
+    nameEl.textContent = project.name;
+
+    const metaEl = document.createElement('div');
+    metaEl.className = 'project-card-meta';
+    metaEl.innerHTML = `<span>${scenesCount} scene${scenesCount !== 1 ? 's' : ''}</span><span>${dateStr}</span>`;
+
+    card.appendChild(thumbEl);
+    card.appendChild(nameEl);
+    card.appendChild(metaEl);
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.project-card-gear-wrap')) return;
+      this.#onOpen(project);
+    });
+
+    return card;
+  }
+
+  #buildEditorMenu() {
+    const btn = this.#el.querySelector('#db-editor-btn');
+    if (!btn) return;
+    btn.style.position = 'relative';
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'topbar-dropdown';
+
+    const themeRow = document.createElement('div');
+    themeRow.className = 'topbar-dropdown-item topbar-theme-row';
+    themeRow.innerHTML = `<span>Theme</span>`;
+    const themeSelect = document.createElement('select');
+    themeSelect.className = 'topbar-theme-select';
+    [['default', 'Default'], ['oldschool', 'Oldschool']].forEach(([val, label]) => {
+      const opt = document.createElement('option');
+      opt.value = val; opt.textContent = label;
+      if ((localStorage.getItem('editorTheme') ?? 'default') === val) opt.selected = true;
+      themeSelect.appendChild(opt);
+    });
+    themeSelect.addEventListener('change', (e) => { e.stopPropagation(); this.#applyTheme(themeSelect.value); });
+    themeSelect.addEventListener('click', (e) => e.stopPropagation());
+    themeRow.appendChild(themeSelect);
+    dropdown.appendChild(themeRow);
+
+    const importItem = document.createElement('div');
+    importItem.className = 'topbar-dropdown-item';
+    importItem.innerHTML = '&#128229; Import Project';
+    importItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.remove('open');
+      this.#importProject();
+    });
+    dropdown.appendChild(importItem);
+
+    btn.appendChild(dropdown);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+  }
+
+  #applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('editorTheme', theme);
   }
 
   async #createProject() {
@@ -137,9 +247,5 @@ export class Dashboard {
         alert('Failed to import: ' + e.message);
       }
     });
-  }
-
-  #esc(str) {
-    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 }

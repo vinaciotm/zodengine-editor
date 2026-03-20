@@ -80,19 +80,47 @@ export class TopBar {
   }
 
   #buildEditorMenu() {
-    this.#buildDropdown('tbtn-editor', [
-      { label: 'Theme: Toggle (Default / Oldschool)', action: 'editor-theme' },
-      { label: 'Language', action: 'editor-language' },
-      { label: 'Shortcuts', action: 'editor-shortcuts' },
-    ]);
+    const btn = this.#el.querySelector('#tbtn-editor');
+    if (!btn) return;
+    btn.style.position = 'relative';
+    const dropdown = document.createElement('div');
+    dropdown.className = 'topbar-dropdown';
+
+    // Theme select row
+    const themeRow = document.createElement('div');
+    themeRow.className = 'topbar-dropdown-item topbar-theme-row';
+    themeRow.innerHTML = `<span>Theme</span>`;
+    const themeSelect = document.createElement('select');
+    themeSelect.className = 'topbar-theme-select';
+    [['default', 'Default'], ['oldschool', 'Oldschool']].forEach(([val, label]) => {
+      const opt = document.createElement('option');
+      opt.value = val; opt.textContent = label;
+      if ((localStorage.getItem('editorTheme') ?? 'default') === val) opt.selected = true;
+      themeSelect.appendChild(opt);
+    });
+    themeSelect.addEventListener('change', (e) => { e.stopPropagation(); this.#applyTheme(themeSelect.value); });
+    themeSelect.addEventListener('click', (e) => e.stopPropagation());
+    themeRow.appendChild(themeSelect);
+    dropdown.appendChild(themeRow);
+
+    dropdown.appendChild(this.#makeSep());
+    dropdown.appendChild(this.#makeItem('Language', 'editor-language'));
+    dropdown.appendChild(this.#makeItem('Shortcuts', 'editor-shortcuts'));
+    dropdown.appendChild(this.#makeSep());
+    dropdown.appendChild(this.#makeItem('Exit to Dashboard', 'exit', true));
+
+    btn.appendChild(dropdown);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = dropdown.classList.contains('open');
+      this.#closeMenus();
+      if (!isOpen) { dropdown.classList.add('open'); this.#openMenu = dropdown; }
+    });
   }
 
-  #cycleTheme() {
-    const current = document.documentElement.dataset.theme ?? 'default';
-    const next = current === 'default' ? 'oldschool' : 'default';
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem('editorTheme', next);
-    showToast(`Theme: ${next === 'oldschool' ? 'Oldschool' : 'Default'}`, 'success');
+  #applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('editorTheme', theme);
   }
 
   #buildSceneMenu() {
@@ -177,9 +205,7 @@ export class TopBar {
       { label: 'Export Project (.json)', action: 'export-project' },
       { label: '&#127918; Export Game (HTML)', action: 'export-game' },
       { sep: true },
-      { label: '&#9881; Settings', action: 'settings' },
-      { sep: true },
-      { label: 'Exit to Dashboard', action: 'exit', danger: true },
+      { label: '&#9881; Project Settings', action: 'settings' },
     ]);
   }
 
@@ -230,7 +256,6 @@ export class TopBar {
       case 'save-project': this.#saveProject(); break;
       case 'export-project': this.#exportProject(); break;
       case 'export-game': this.#exportGame(); break;
-      case 'editor-theme': this.#cycleTheme(); break;
       case 'editor-language':
       case 'editor-shortcuts':
       case 'settings': showToast('Coming soon'); break;

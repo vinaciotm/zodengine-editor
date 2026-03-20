@@ -47,13 +47,17 @@ export class EditorLayout {
     left.className = 'editor-left';
     body.appendChild(left);
 
-    const prefabs = new PrefabsPanel(editor);
-    prefabs.mount(left);
-    this.#panels.push(prefabs);
-
     const scenes = new ScenesPanel(editor);
     scenes.mount(left);
     this.#panels.push(scenes);
+
+    const hierarchy = new HierarchyPanel(editor);
+    hierarchy.mount(left);
+    this.#panels.push(hierarchy);
+
+    const prefabs = new PrefabsPanel(editor);
+    prefabs.mount(left);
+    this.#panels.push(prefabs);
 
     const center = document.createElement('div');
     center.className = 'editor-center';
@@ -80,14 +84,6 @@ export class EditorLayout {
     const right = document.createElement('div');
     right.className = 'editor-right';
     body.appendChild(right);
-
-    const hierarchy = new HierarchyPanel(editor);
-    hierarchy.mount(right);
-    this.#panels.push(hierarchy);
-
-    const divider = document.createElement('div');
-    divider.className = 'panel-divider';
-    right.appendChild(divider);
 
     const inspector = new InspectorPanel(editor);
     inspector.mount(right);

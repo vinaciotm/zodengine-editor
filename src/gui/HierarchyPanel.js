@@ -26,12 +26,7 @@ export class HierarchyPanel {
 
     const header = document.createElement('div');
     header.className = 'panel-header';
-    header.innerHTML = `
-      <span>&#128279; GameObjects</span>
-      <div class="panel-header-actions">
-        <button class="btn-icon btn" title="Deselect all" id="hier-deselect">&#215;</button>
-      </div>
-    `;
+    header.innerHTML = `<span>&#128279; GameObjects</span>`;
     this.#el.appendChild(header);
 
     this.#contentEl = document.createElement('div');
@@ -40,7 +35,6 @@ export class HierarchyPanel {
     this.#el.appendChild(this.#contentEl);
 
     makeCollapsiblePanel(header, this.#contentEl, true);
-    header.querySelector('#hier-deselect').addEventListener('click', () => this.#editor.clearSelection());
 
     this.#render();
     this.#unsubs.push(
