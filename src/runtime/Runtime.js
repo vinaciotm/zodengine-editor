@@ -68,9 +68,16 @@ export class Runtime {
         padding:4px 16px;background:#d43f3f;border:none;border-radius:3px;
         color:white;cursor:pointer;font-size:12px;font-weight:600;
       ">&#9632; Exit</button>
+      <label id="runtime-debug-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer;margin-left:8px;user-select:none;">
+        <input type="checkbox" id="runtime-debug" style="cursor:pointer;accent-color:#3fd46b;" />
+        <span style="font-size:11px;color:#888;">Debug</span>
+      </label>
     `;
     this.#overlay.appendChild(hud);
     hud.querySelector('#runtime-exit').addEventListener('click', () => this.stop());
+    hud.querySelector('#runtime-debug').addEventListener('change', (e) => {
+      this.#renderSystem.setEditorVisualsVisible(e.target.checked);
+    });
 
     // Viewport
     const viewport = document.createElement('div');

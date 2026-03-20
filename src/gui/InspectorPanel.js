@@ -71,7 +71,7 @@ export class InspectorPanel {
     if (parentComp) {
       const parentTag = world.getComponent(parentComp.parentId, TagComponent);
       const badge = document.createElement('div');
-      badge.style.cssText = 'padding:4px 12px;font-size:11px;color:var(--accent2);background:var(--bg-dark);border-bottom:1px solid var(--border);';
+      badge.style.cssText = 'padding:2px 8px;font-size:10px;color:var(--accent2);background:var(--bg-dark);border-bottom:1px solid var(--border);';
       badge.textContent = `↳ Child of: ${parentTag?.name ?? 'Group'} (local coords)`;
       content.appendChild(badge);
     }

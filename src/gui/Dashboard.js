@@ -193,7 +193,12 @@ export class Dashboard {
     themeRow.innerHTML = `<span>Theme</span>`;
     const themeSelect = document.createElement('select');
     themeSelect.className = 'topbar-theme-select';
-    [['default', 'Default'], ['flat', 'Flat']].forEach(([val, label]) => {
+    [
+      ['default','Default'],['orange','Orange'],['green','Green'],
+      ['blue','Blue'],['red','Red'],['purple','Purple'],['pink','Pink'],
+      ['flat','Flat'],['flat-orange','Flat Orange'],['flat-green','Flat Green'],
+      ['flat-blue','Flat Blue'],['flat-red','Flat Red'],['flat-purple','Flat Purple'],['flat-pink','Flat Pink'],
+    ].forEach(([val, label]) => {
       const opt = document.createElement('option');
       opt.value = val; opt.textContent = label;
       if ((localStorage.getItem('editorTheme') ?? 'default') === val) opt.selected = true;

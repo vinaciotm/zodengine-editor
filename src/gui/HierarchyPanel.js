@@ -40,14 +40,25 @@ export class HierarchyPanel {
     this.#render();
     this.#unsubs.push(
       this.#editor.on('hierarchy:changed', () => this.#render()),
-      this.#editor.on('entity:selected', () => this.#render()),
-      this.#editor.on('selection:changed', () => this.#render()),
+      this.#editor.on('entity:selected', () => this.#updateSelection()),
+      this.#editor.on('selection:changed', () => this.#updateSelection()),
     );
   }
 
   destroy() {
     this.#unsubs.forEach(u => u());
     this.#el?.remove();
+  }
+
+  #updateSelection() {
+    const sel = this.#editor.selectedEntityId;
+    const selIds = this.#editor.selectedEntityIds;
+    if (!this.#contentEl) return;
+    this.#contentEl.querySelectorAll('.hierarchy-item').forEach(row => {
+      const id = row.dataset.entityId;
+      const isSelected = (sel !== null && sel === id) || selIds.has(id);
+      row.classList.toggle('selected', isSelected);
+    });
   }
 
   #render() {
@@ -178,6 +189,7 @@ export class HierarchyPanel {
 
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        sfx.save();
         editor.deleteEntity(id);
       });
 

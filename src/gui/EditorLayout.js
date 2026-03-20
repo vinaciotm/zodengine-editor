@@ -73,9 +73,53 @@ export class EditorLayout {
     // Cenários + Objetos collapse state → narrow mode
     let scenesOpen = true;
     let hierOpen = true;
+    let rightOpen = true;
 
-    const updateNarrow = () => {
-      left.classList.toggle('narrow', !scenesOpen && !hierOpen);
+    // Center (viewport) — created before float bars
+    const center = document.createElement('div');
+    center.className = 'editor-center';
+    mainRow.appendChild(center);
+
+    const viewport = document.createElement('div');
+    viewport.className = 'viewport-wrapper';
+    viewport.style.position = 'relative';
+    center.appendChild(viewport);
+
+    // Floating panel re-open buttons (overlaid on viewport edges)
+    const leftFloat = document.createElement('div');
+    leftFloat.className = 'panel-float-bar panel-float-left';
+    leftFloat.style.display = 'none';
+    center.appendChild(leftFloat);
+
+    const rightFloat = document.createElement('div');
+    rightFloat.className = 'panel-float-bar panel-float-right';
+    rightFloat.style.display = 'none';
+    center.appendChild(rightFloat);
+
+    const makeFloatBtn = (icon, title) => {
+      const btn = document.createElement('button');
+      btn.className = 'panel-float-btn';
+      btn.innerHTML = icon;
+      btn.title = title;
+      return btn;
+    };
+    const scenesFloatBtn = makeFloatBtn('🎬', 'Cenários');
+    const hierFloatBtn = makeFloatBtn('🔗', 'Objetos');
+    leftFloat.appendChild(scenesFloatBtn);
+    leftFloat.appendChild(hierFloatBtn);
+
+    const rightFloatBtn = makeFloatBtn('📄', 'Detalhes');
+    rightFloat.appendChild(rightFloatBtn);
+
+    const updateLeftNarrow = () => {
+      const isNarrow = !scenesOpen && !hierOpen;
+      left.classList.toggle('narrow', isNarrow);
+      leftFloat.style.display = isNarrow ? 'flex' : 'none';
+    };
+
+    const updateRightNarrow = () => {
+      right.classList.toggle('narrow', !rightOpen);
+      rightFloat.style.display = rightOpen ? 'none' : 'flex';
     };
 
     // Hook Cenários header: track state + narrow
@@ -84,7 +128,7 @@ export class EditorLayout {
       if (e.target.closest('.panel-header-actions')) return;
       const content = scenesWrap.querySelector('.panel-content');
       scenesOpen = !content || content.style.display !== 'none';
-      updateNarrow();
+      updateLeftNarrow();
     });
 
     // Hook Objetos header: narrow mode only
@@ -95,18 +139,12 @@ export class EditorLayout {
       const panel = [...left.children].find(el => el !== scenesWrap);
       const content = panel?.querySelector('.panel-content');
       hierOpen = !content || content.style.display !== 'none';
-      updateNarrow();
+      updateLeftNarrow();
     });
 
-    // Center (viewport)
-    const center = document.createElement('div');
-    center.className = 'editor-center';
-    mainRow.appendChild(center);
-
-    const viewport = document.createElement('div');
-    viewport.className = 'viewport-wrapper';
-    viewport.style.position = 'relative';
-    center.appendChild(viewport);
+    // Float buttons expand their panel
+    scenesFloatBtn.addEventListener('click', () => scenesHeader?.click());
+    hierFloatBtn.addEventListener('click', () => hierHeader?.click());
 
     const toolbar = new TransformToolbar(editor);
     toolbar.mount(viewport);
@@ -148,15 +186,21 @@ export class EditorLayout {
       if (e.target.closest('.panel-header-actions')) return;
       const content = right.querySelector('#insp-content');
       if (!content) return;
-      const isOpen = content.style.display !== 'none';
-      right.classList.toggle('narrow', !isOpen);
+      rightOpen = content.style.display !== 'none';
+      updateRightNarrow();
+    });
+
+    // Right float button expands Detalhes
+    rightFloatBtn.addEventListener('click', () => {
+      right.querySelector('.panel-header')?.click();
     });
   }
 
   async #startRuntime() {
     this.#editor.saveCurrentScene();
     const sceneData = this.#editor.project.scenes[this.#editor.currentSceneIndex];
-    this.#runtime = new Runtime(() => { this.#runtime = null; });
+    this.#editor.isPlaying = true;
+    this.#runtime = new Runtime(() => { this.#runtime = null; this.#editor.isPlaying = false; });
     await this.#runtime.start(sceneData);
   }
 

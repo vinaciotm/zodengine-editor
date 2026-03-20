@@ -39,7 +39,7 @@ export class PrefabsPanel {
         { spawn: 'camera',        icon: '&#127909;', label: 'Camera' },
         { spawn: 'spheretrigger', icon: '&#128993;', label: 'SphereTrig' },
         { spawn: 'boxtrigger',    icon: '&#128243;', label: 'BoxTrig' },
-        { spawn: 'playerstart',   icon: '&#128694;', label: 'Player' },
+        { spawn: 'playerstart',   icon: '&#128694;', label: 'Start' },
       ],
     };
 
@@ -70,7 +70,7 @@ export class PrefabsPanel {
 
     this.#el.innerHTML = `
       <div class="panel-header" id="assets-header">
-        <span class="ph-icon">&#128736;</span><span class="ph-text"> Assets</span>
+        <span class="ph-icon">&#128230;</span><span class="ph-text"> Elementos</span>
       </div>
       <div class="assets-panel" id="assets-body">
         <div class="assets-tabs">

@@ -13,6 +13,7 @@ export class RenderSystem {
   scene = null;
   entityObjects = new Map();
   lightingEnabled = true;
+  shadowsEnabled = true;
   #parentCompClass = null;
 
   constructor(threeScene) {
@@ -90,12 +91,29 @@ export class RenderSystem {
     if (!enabled) this.scene.fog = null;
   }
 
-  // Hide all editor-only visual indicators (sprites, line groups, range rings)
+  // Hide all editor-only visual indicators (sprites, line groups, range rings, editor-only entities)
   hideEditorIcons() {
     for (const obj of this.entityObjects.values()) {
-      obj.traverse(child => {
-        if (child.userData.isEditorIcon) child.visible = false;
-      });
+      if (obj.userData.isEditorOnly) {
+        obj.visible = false;
+      } else {
+        obj.traverse(child => {
+          if (child.userData.isEditorIcon) child.visible = false;
+        });
+      }
+    }
+  }
+
+  // Show or hide all editor visuals (for runtime debug toggle)
+  setEditorVisualsVisible(visible) {
+    for (const obj of this.entityObjects.values()) {
+      if (obj.userData.isEditorOnly) {
+        obj.visible = visible;
+      } else {
+        obj.traverse(child => {
+          if (child.userData.isEditorIcon) child.visible = visible;
+        });
+      }
     }
   }
 
@@ -103,7 +121,7 @@ export class RenderSystem {
     for (const [entityId, obj] of this.entityObjects) {
       // Fog entities: update scene.fog from component values (only in lit mode)
       if (obj.userData.isFogEntity) {
-        if (this.lightingEnabled) {
+        if (this.lightingEnabled && obj.visible) {
           const fog = this.world?.getComponent(entityId, FogComponent);
           if (fog) {
             if (this.scene.fog) {
@@ -221,15 +239,17 @@ export class RenderSystem {
     switch (comp.type) {
       case 'directional': {
         light = new THREE.DirectionalLight(comp.color, comp.intensity);
-        light.shadow.mapSize.setScalar(4096);
-        light.shadow.camera.near = 0.1;
-        light.shadow.camera.far = 100;
-        light.shadow.camera.left = -15;
-        light.shadow.camera.right = 15;
-        light.shadow.camera.top = 15;
-        light.shadow.camera.bottom = -15;
-        light.shadow.bias = -0.0003;
-        light.shadow.normalBias = 0.02;
+        if (this.shadowsEnabled) {
+          light.shadow.mapSize.setScalar(4096);
+          light.shadow.camera.near = 0.1;
+          light.shadow.camera.far = 100;
+          light.shadow.camera.left = -15;
+          light.shadow.camera.right = 15;
+          light.shadow.camera.top = 15;
+          light.shadow.camera.bottom = -15;
+          light.shadow.bias = -0.0003;
+          light.shadow.normalBias = 0.02;
+        }
         // Target inside group → light always shines downward and rotates with entity
         const dirTarget = new THREE.Object3D();
         dirTarget.position.set(0, -1, 0);
@@ -244,11 +264,13 @@ export class RenderSystem {
         light.angle = Math.PI / 6;
         light.penumbra = 0.2;
         light.distance = comp.distance ?? 1;
-        light.shadow.mapSize.setScalar(2048);
-        light.shadow.camera.near = 0.1;
-        light.shadow.camera.far = Math.max((comp.distance ?? 1) * 4, 20);
-        light.shadow.bias = -0.0003;
-        light.shadow.normalBias = 0.02;
+        if (this.shadowsEnabled) {
+          light.shadow.mapSize.setScalar(512);
+          light.shadow.camera.near = 0.1;
+          light.shadow.camera.far = Math.max((comp.distance ?? 1) * 4, 20);
+          light.shadow.bias = -0.0003;
+          light.shadow.normalBias = 0.02;
+        }
         const spotTarget = new THREE.Object3D();
         spotTarget.position.set(0, -1, 0);
         grp.add(spotTarget);
@@ -260,11 +282,13 @@ export class RenderSystem {
       default: {
         // PointLight: range rings embedded in group (3 orthogonal circles)
         light = new THREE.PointLight(comp.color, comp.intensity, comp.distance ?? 1, 2);
-        light.shadow.mapSize.setScalar(2048);
-        light.shadow.camera.near = 0.1;
-        light.shadow.camera.far = Math.max((comp.distance ?? 1) * 4, 20);
-        light.shadow.bias = -0.0003;
-        light.shadow.normalBias = 0.02;
+        if (this.shadowsEnabled) {
+          light.shadow.mapSize.setScalar(512);
+          light.shadow.camera.near = 0.1;
+          light.shadow.camera.far = Math.max((comp.distance ?? 1) * 4, 20);
+          light.shadow.bias = -0.0003;
+          light.shadow.normalBias = 0.02;
+        }
         const rings = this.#makePointLightRings(comp.distance ?? 1);
         grp.add(rings);
         grp.userData.rangeRingsRef = rings;
@@ -272,7 +296,7 @@ export class RenderSystem {
       }
     }
 
-    light.castShadow = true;
+    light.castShadow = this.shadowsEnabled;
     grp.add(light);
     grp.userData.lightRef = light;
 
@@ -290,7 +314,7 @@ export class RenderSystem {
     grp.userData.isEditorIcon = true;
     const N = 64;
     const mat = () => new THREE.LineBasicMaterial({
-      color: 0xffcc44, transparent: true, opacity: 0.5, depthWrite: false,
+      color: 0xffffff, transparent: true, opacity: 0.15, depthWrite: false,
     });
 
     const makeCircle = (axisA, axisB) => {
@@ -316,7 +340,7 @@ export class RenderSystem {
     const grp = new THREE.Group();
     grp.userData.isEditorIcon = true;
     const mat = () => new THREE.LineBasicMaterial({
-      color: 0xffcc00, transparent: true, opacity: 0.5, depthWrite: false,
+      color: 0xffffff, transparent: true, opacity: 0.15, depthWrite: false,
     });
 
     // Disc on XZ plane (radius 0.6)
@@ -346,7 +370,7 @@ export class RenderSystem {
     const grp = new THREE.Group();
     grp.userData.isEditorIcon = true;
     const mat = () => new THREE.LineBasicMaterial({
-      color: 0xffaa44, transparent: true, opacity: 0.5, depthWrite: false,
+      color: 0xffffff, transparent: true, opacity: 0.15, depthWrite: false,
     });
 
     const r = Math.max(range, 0.1) * Math.tan(angle);
@@ -373,10 +397,22 @@ export class RenderSystem {
 
   #makeCamera(comp) {
     const grp = new THREE.Group();
+    grp.userData.isEditorOnly = true;
     const cam = new THREE.PerspectiveCamera(comp.fov, 1, comp.near, comp.far);
     cam.updateProjectionMatrix();
     grp.add(cam);
     grp.userData.camRef = cam;
+
+    // Red laser: camera look direction (along -Z)
+    const laser = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -(comp.far ?? 100) * 0.35),
+      ]),
+      new THREE.LineBasicMaterial({ color: 0xff1a1a, transparent: true, opacity: 0.18, depthWrite: false })
+    );
+    laser.userData.isEditorIcon = true;
+    grp.add(laser);
 
     const sprite = this.#makeCameraSprite();
     sprite.userData.isEditorIcon = true;
@@ -600,11 +636,14 @@ export class RenderSystem {
       ? new THREE.SphereGeometry(comp.size * 0.5, 16, 16)
       : new THREE.BoxGeometry(comp.size, comp.size, comp.size);
     const mat = new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true, transparent: true, opacity: 0.6 });
-    return new THREE.Mesh(geo, mat);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData.isEditorOnly = true;
+    return mesh;
   }
 
   #makePlayerStart() {
     const group = new THREE.Group();
+    group.userData.isEditorOnly = true;
     const body = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.3, 0.8, 4, 8),
       new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true })

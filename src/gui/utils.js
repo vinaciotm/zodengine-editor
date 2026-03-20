@@ -145,6 +145,7 @@ export function makeCollapsiblePanel(headerEl, contentEl, initialOpen = true, on
     contentEl.style.display = 'none';
     if (panelEl) panelEl.style.flex = '0 0 auto';
   }
+  headerEl.classList.toggle('header-collapsed', !open);
 
   headerEl.style.cursor = 'pointer';
   headerEl.addEventListener('click', (e) => {
@@ -152,6 +153,7 @@ export function makeCollapsiblePanel(headerEl, contentEl, initialOpen = true, on
     if (e.target.closest('.panel-header-actions')) return;
     open = !open;
     chevron.innerHTML = open ? '&#9660;' : '&#9654;';
+    headerEl.classList.toggle('header-collapsed', !open);
     if (open) {
       contentEl.style.display = '';
       if (panelEl) panelEl.style.flex = savedFlex;

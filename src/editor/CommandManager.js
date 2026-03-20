@@ -82,3 +82,36 @@ export class TransformCommand {
   undo() { this.#editor.applyTransformSilent(this.#entityId, this.#before); }
   redo() { this.#editor.applyTransformSilent(this.#entityId, this.#after); }
 }
+
+export class DeleteSceneCommand {
+  #editor; #scene; #sceneIndex;
+  constructor(editor, scene, sceneIndex) {
+    this.#editor = editor;
+    this.#scene = scene;
+    this.#sceneIndex = sceneIndex;
+  }
+  undo() {
+    this.#editor.insertSceneSilent(this.#scene, this.#sceneIndex);
+    this.#editor.switchScene(this.#sceneIndex);
+  }
+  redo() { this.#editor.deleteScene(this.#sceneIndex); }
+}
+
+export class AddSceneCommand {
+  #editor; #sceneIndex; #scene = null;
+  constructor(editor, sceneIndex) {
+    this.#editor = editor;
+    this.#sceneIndex = sceneIndex;
+  }
+  undo() {
+    const e = this.#editor;
+    if (e.project.currentSceneIndex === this.#sceneIndex) e.saveCurrentScene();
+    this.#scene = { ...e.project.scenes[this.#sceneIndex] };
+    e.deleteScene(this.#sceneIndex);
+  }
+  redo() {
+    const e = this.#editor;
+    e.insertSceneSilent(this.#scene, this.#sceneIndex);
+    e.switchScene(this.#sceneIndex);
+  }
+}

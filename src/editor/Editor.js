@@ -53,12 +53,17 @@ export class Editor {
   selectedEntityIds = new Set();
   transformMode = "translate";
   project = null;
+  isPlaying = false;
   commandManager = new CommandManager();
+  sceneCommandManager = new CommandManager();
 
   #viewMode = "default";
   #helpers = new Map();
   #transformBefore = null;
   #clipboard = null;
+  #pointerDownPos = null;
+  #pointerDragged = false;
+  #grid = null;
 
   #listeners = new Map();
   container = null;
@@ -97,12 +102,11 @@ export class Editor {
     await this.renderer.init();
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(container.clientWidth, container.clientHeight);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = false;
     container.appendChild(this.renderer.domElement);
 
-    const grid = new THREE.GridHelper(20, 20, 0x444444, 0x2a2a2a);
-    this.threeScene.add(grid);
+    this.#grid = new THREE.GridHelper(100, 100, 0x444444, 0x2a2a2a);
+    this.threeScene.add(this.#grid);
 
     this.orbitControls = new OrbitControls(
       this.camera,
@@ -160,15 +164,15 @@ export class Editor {
 
     this.world = new World();
     this.renderSystem = new RenderSystem(this.threeScene);
+    this.renderSystem.shadowsEnabled = false;
     this.renderSystem.setParentComponentClass(ParentComponent);
     this.world.addSystem(this.renderSystem);
 
     this.#loadCurrentScene();
 
-    this.renderer.domElement.addEventListener(
-      "pointerdown",
-      this.#onPointerDown,
-    );
+    this.renderer.domElement.addEventListener("pointerdown",  this.#onPointerDown);
+    this.renderer.domElement.addEventListener("pointermove",  this.#onPointerMove);
+    this.renderer.domElement.addEventListener("pointerup",    this.#onPointerUp);
 
     this.#resizeObserver = new ResizeObserver(() => this.#onResize());
     this.#resizeObserver.observe(container);
@@ -244,10 +248,10 @@ export class Editor {
     camRef.aspect = pw / ph;
     camRef.updateProjectionMatrix();
 
-    // Temporarily hide all editor-only indicators (sprites, rings, line groups, etc.)
+    // Temporarily hide all editor-only indicators (sprites, rings, line groups, editor-only entities)
     const hiddenIcons = [];
     this.threeScene.traverse((child) => {
-      if (child.userData.isEditorIcon) {
+      if ((child.userData.isEditorIcon || child.userData.isEditorOnly) && child.visible) {
         hiddenIcons.push(child);
         child.visible = false;
       }
@@ -334,6 +338,14 @@ export class Editor {
         const camRef = obj.userData.camRef;
         if (camRef) {
           const helper = new THREE.CameraHelper(camRef);
+          // Paint all lines white
+          const colors = helper.geometry.attributes.color;
+          if (colors) {
+            for (let i = 0; i < colors.count; i++) colors.setXYZ(i, 1, 1, 1);
+            colors.needsUpdate = true;
+          }
+          helper.material.transparent = true;
+          helper.material.opacity = 0.15;
           this.threeScene.add(helper);
           this.#helpers.set(entityId, helper);
         }
@@ -354,13 +366,18 @@ export class Editor {
   #updateDebugOpacities() {
     for (const [entityId, obj] of this.renderSystem.entityObjects) {
       const isSelected = this.selectedEntityIds.has(entityId);
-      const opacity = isSelected ? 1.0 : 0.5;
+      const opacity = isSelected ? 0.35 : 0.15;
       for (const child of obj.children) {
         if (!child.userData.isEditorIcon) continue;
         child.traverse((node) => {
           if (node.material) node.material.opacity = opacity;
         });
       }
+    }
+    // Camera helpers live outside entity objects — update their opacity too
+    for (const [entityId, helper] of this.#helpers) {
+      const isSelected = this.selectedEntityIds.has(entityId);
+      helper.material.opacity = isSelected ? 0.35 : 0.15;
     }
   }
 
@@ -410,6 +427,22 @@ export class Editor {
 
   #onPointerDown = (e) => {
     if (e.button !== 0) return;
+    this.#pointerDownPos = { x: e.clientX, y: e.clientY };
+    this.#pointerDragged = false;
+  };
+
+  #onPointerMove = (e) => {
+    if (!this.#pointerDownPos) return;
+    const dx = e.clientX - this.#pointerDownPos.x;
+    const dy = e.clientY - this.#pointerDownPos.y;
+    if (dx * dx + dy * dy > 25) this.#pointerDragged = true; // 5px threshold
+  };
+
+  #onPointerUp = (e) => {
+    if (e.button !== 0) return;
+    if (!this.#pointerDownPos) return;
+    this.#pointerDownPos = null;
+    if (this.#pointerDragged) return;       // orbit drag — don't change selection
     if (this.transformControls.dragging) return;
 
     const entityId = this.#getHitEntityId(e);
@@ -433,11 +466,7 @@ export class Editor {
         this.transformControls.detach();
       }
       this.emit("entity:selected", this.selectedEntityId);
-      this.emit(
-        "selection:changed",
-        this.selectedEntityIds,
-        this.selectedEntityId,
-      );
+      this.emit("selection:changed", this.selectedEntityIds, this.selectedEntityId);
     } else {
       this.selectEntity(entityId);
     }
@@ -473,6 +502,28 @@ export class Editor {
     this.transformMode = mode;
     this.transformControls.setMode(mode);
     this.emit("transformMode:changed", mode);
+  }
+
+  setSnap(enabled, step) {
+    if (enabled) {
+      this.transformControls.translationSnap = step;
+      this.transformControls.rotationSnap = Math.PI / 180; // always 1°
+      this.transformControls.scaleSnap = step;
+    } else {
+      this.transformControls.translationSnap = null;
+      this.transformControls.rotationSnap = null;
+      this.transformControls.scaleSnap = null;
+    }
+    // Rebuild grid to match step size
+    if (this.#grid) {
+      this.threeScene.remove(this.#grid);
+      this.#grid.dispose?.();
+      const size = 200;
+      const divisions = Math.min(800, Math.round(size / step));
+      this.#grid = new THREE.GridHelper(size, divisions, 0x444444, 0x2a2a2a);
+      this.threeScene.add(this.#grid);
+    }
+    this.emit("snap:changed", { enabled, step });
   }
 
   // --- Grouping ---
@@ -1028,6 +1079,17 @@ export class Editor {
       this.project.currentSceneIndex = this.project.scenes.length - 1;
     }
     this.#loadCurrentScene();
+    this.commandManager.clear();
+    this.emit("scenes:changed");
+  }
+
+  insertSceneSilent(scene, index) {
+    const scenes = this.project.scenes;
+    if (index >= scenes.length) {
+      scenes.push(scene);
+    } else {
+      scenes.splice(index, 0, scene);
+    }
     this.emit("scenes:changed");
   }
 
@@ -1069,10 +1131,9 @@ export class Editor {
     cancelAnimationFrame(this.#animFrameId);
     this.#resizeObserver?.disconnect();
     this.#clearHelpers();
-    this.renderer.domElement.removeEventListener(
-      "pointerdown",
-      this.#onPointerDown,
-    );
+    this.renderer.domElement.removeEventListener("pointerdown", this.#onPointerDown);
+    this.renderer.domElement.removeEventListener("pointermove", this.#onPointerMove);
+    this.renderer.domElement.removeEventListener("pointerup",   this.#onPointerUp);
     this.orbitControls.dispose();
     this.transformControls.dispose();
     this.renderer.dispose();

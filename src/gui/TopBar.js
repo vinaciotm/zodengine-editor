@@ -1,5 +1,6 @@
 import { showModal, showNewSceneModal, showToast, showConfirm } from './utils.js';
 import { sfx } from './sfx.js';
+import { DeleteSceneCommand, AddSceneCommand } from '../editor/CommandManager.js';
 
 export class TopBar {
   #el = null;
@@ -11,14 +12,21 @@ export class TopBar {
 
   #docClickHandler = () => { this.#closeMenus(); };
   #keyHandler = (e) => {
+    if (this.#editor.isPlaying) return;
     const tag = e.target.tagName;
     const inInput = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
     if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this.#save(); return; }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
-      e.preventDefault(); this.#editor.commandManager.redo(); return;
+      e.preventDefault();
+      if (this.#editor.commandManager.canRedo) this.#editor.commandManager.redo();
+      else this.#editor.sceneCommandManager.redo();
+      return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-      e.preventDefault(); this.#editor.commandManager.undo(); return;
+      e.preventDefault();
+      if (this.#editor.commandManager.canUndo) this.#editor.commandManager.undo();
+      else this.#editor.sceneCommandManager.undo();
+      return;
     }
     if (!inInput && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'd') {
       e.preventDefault();
@@ -135,7 +143,12 @@ export class TopBar {
     themeRow.innerHTML = `<span>Theme</span>`;
     const themeSelect = document.createElement('select');
     themeSelect.className = 'topbar-theme-select';
-    [['default', 'Default'], ['flat', 'Flat']].forEach(([val, label]) => {
+    [
+      ['default','Default'],['orange','Orange'],['green','Green'],
+      ['blue','Blue'],['red','Red'],['purple','Purple'],['pink','Pink'],
+      ['flat','Flat'],['flat-orange','Flat Orange'],['flat-green','Flat Green'],
+      ['flat-blue','Flat Blue'],['flat-red','Flat Red'],['flat-purple','Flat Purple'],['flat-pink','Flat Pink'],
+    ].forEach(([val, label]) => {
       const opt = document.createElement('option');
       opt.value = val; opt.textContent = label;
       if ((localStorage.getItem('editorTheme') ?? 'default') === val) opt.selected = true;
@@ -200,7 +213,10 @@ export class TopBar {
         item.addEventListener('click', (e) => {
           e.stopPropagation();
           this.#closeMenus();
-          if (idx !== this.#editor.currentSceneIndex) this.#editor.switchScene(idx);
+          if (idx !== this.#editor.currentSceneIndex) {
+            sfx.save();
+            this.#editor.switchScene(idx);
+          }
         });
         dropdown.appendChild(item);
       }
@@ -302,8 +318,8 @@ export class TopBar {
       case 'export-project': this.#exportProject(); break;
       case 'export-game': this.#exportGame(); break;
       case 'editor-language':
-      case 'editor-shortcuts':
       case 'settings': showToast('Coming soon'); break;
+      case 'editor-shortcuts': this.#showShortcuts(); break;
       case 'exit': this.#exit(); break;
     }
   }
@@ -329,11 +345,58 @@ export class TopBar {
     this.#onExit();
   }
 
+  #showShortcuts() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal shortcuts-modal">
+        <h2>&#9875; Atalhos</h2>
+        <div class="shortcuts-grid">
+          <div class="shortcuts-section">
+            <div class="shortcuts-title">Transformação</div>
+            <div class="shortcut-row"><kbd>Q</kbd><span>Posição</span></div>
+            <div class="shortcut-row"><kbd>W</kbd><span>Rotação</span></div>
+            <div class="shortcut-row"><kbd>E</kbd><span>Escala</span></div>
+          </div>
+          <div class="shortcuts-section">
+            <div class="shortcuts-title">Visualização</div>
+            <div class="shortcut-row"><kbd>R</kbd><span>Com luz</span></div>
+            <div class="shortcut-row"><kbd>T</kbd><span>Sem efeitos</span></div>
+            <div class="shortcut-row"><kbd>Y</kbd><span>Wireframe</span></div>
+          </div>
+          <div class="shortcuts-section">
+            <div class="shortcuts-title">Edição</div>
+            <div class="shortcut-row"><kbd>⌘C</kbd><span>Copiar</span></div>
+            <div class="shortcut-row"><kbd>⌘V</kbd><span>Colar</span></div>
+            <div class="shortcut-row"><kbd>⌘D</kbd><span>Duplicar</span></div>
+            <div class="shortcut-row"><kbd>⌘Z</kbd><span>Desfazer</span></div>
+            <div class="shortcut-row"><kbd>⌘⇧Z</kbd><span>Refazer</span></div>
+            <div class="shortcut-row"><kbd>Del</kbd><span>Deletar</span></div>
+          </div>
+          <div class="shortcuts-section">
+            <div class="shortcuts-title">Jogo</div>
+            <div class="shortcut-row"><kbd>P</kbd><span>Play / Stop</span></div>
+            <div class="shortcut-row"><kbd>⌘S</kbd><span>Salvar</span></div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="sc-close">Fechar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector('#sc-close').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  }
+
   async #newScene() {
     const result = await showNewSceneModal();
     if (!result) return;
     const idx = this.#editor.addScene(result.name, result.copy);
     sfx.check();
+    this.#editor.sceneCommandManager.push(new AddSceneCommand(this.#editor, idx));
     this.#editor.switchScene(idx);
   }
 
@@ -347,12 +410,16 @@ export class TopBar {
   }
 
   async #deleteScene() {
-    const s = this.#editor.project.scenes[this.#editor.currentSceneIndex];
+    const idx = this.#editor.currentSceneIndex;
+    const s = this.#editor.project.scenes[idx];
     if (!s) return;
-    const ok = await showConfirm('Delete Scene', `Delete "${s.name}"? This cannot be undone.`, 'Delete');
+    const ok = await showConfirm('Delete Scene', `Delete "${s.name}"?`, 'Delete');
     if (!ok) return;
     sfx.out();
-    this.#editor.deleteScene(this.#editor.currentSceneIndex);
+    this.#editor.saveCurrentScene();
+    const sceneSnapshot = { ...s };
+    this.#editor.sceneCommandManager.push(new DeleteSceneCommand(this.#editor, sceneSnapshot, idx));
+    this.#editor.deleteScene(idx);
   }
 
   async #newProject() {

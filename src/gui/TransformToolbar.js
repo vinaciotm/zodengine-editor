@@ -5,6 +5,8 @@ export class TransformToolbar {
   #editor = null;
   #unsubs = [];
   #keyHandler = null;
+  #snapEnabled = false;
+  #snapStep = 1;
 
   constructor(editor) { this.#editor = editor; }
 
@@ -27,19 +29,21 @@ export class TransformToolbar {
     );
 
     this.#keyHandler = (e) => {
+      if (this.#editor.isPlaying) return;
       const tag = e.target.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-      if (e.key === '1') { sfx.click(); this.#editor.setTransformMode('translate'); }
-      else if (e.key === '2') { sfx.click(); this.#editor.setTransformMode('rotate'); }
-      else if (e.key === '3') {
+      if (e.key === 'q' || e.key === 'Q') { sfx.click(); this.#editor.setTransformMode('translate'); }
+      else if (e.key === 'w' || e.key === 'W') { sfx.click(); this.#editor.setTransformMode('rotate'); }
+      else if (e.key === 'e' || e.key === 'E') {
         const id = this.#editor.selectedEntityId;
         if (!this.#editor.isScaleLocked(id)) { sfx.click(); this.#editor.setTransformMode('scale'); }
       }
-      else if (e.key === '4') { sfx.click(); this.#editor.setViewMode('default'); }
-      else if (e.key === '5') { sfx.click(); this.#editor.setViewMode('unlit'); }
-      else if (e.key === '6') { sfx.click(); this.#editor.setViewMode('wireframe'); }
+      else if (e.key === 'r' || e.key === 'R') { sfx.click(); this.#editor.setViewMode('default'); }
+      else if (e.key === 't' || e.key === 'T') { sfx.click(); this.#editor.setViewMode('unlit'); }
+      else if (e.key === 'y' || e.key === 'Y') { sfx.click(); this.#editor.setViewMode('wireframe'); }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (this.#editor.selectedEntityId !== null) {
+          sfx.save();
           this.#editor.deleteEntity(this.#editor.selectedEntityId);
         }
       }
@@ -103,14 +107,27 @@ export class TransformToolbar {
 
     this.#el.innerHTML = `
       <div class="vt-group">
-        ${btn('translate', ico.translate, mode === 'translate', 'Position [1]')}
-        ${btn('rotate',    ico.rotate,    mode === 'rotate',    'Rotation [2]')}
-        ${btn('scale',     ico.scale,     mode === 'scale',     'Scale [3]', scaleLocked)}
+        ${btn('translate', ico.translate, mode === 'translate', 'Position [Q]')}
+        ${btn('rotate',    ico.rotate,    mode === 'rotate',    'Rotation [W]')}
+        ${btn('scale',     ico.scale,     mode === 'scale',     'Scale [E]', scaleLocked)}
+      </div>
+      <div class="vt-group vt-snap-group">
+        <button class="vt-btn vt-snap-btn${this.#snapEnabled ? ' active' : ''}" data-action="snap-toggle" title="Grid Snap">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="1" width="4" height="4" rx="0.5"/><rect x="6" y="1" width="4" height="4" rx="0.5"/><rect x="11" y="1" width="4" height="4" rx="0.5"/>
+            <rect x="1" y="6" width="4" height="4" rx="0.5"/><rect x="6" y="6" width="4" height="4" rx="0.5"/><rect x="11" y="6" width="4" height="4" rx="0.5"/>
+            <rect x="1" y="11" width="4" height="4" rx="0.5"/><rect x="6" y="11" width="4" height="4" rx="0.5"/><rect x="11" y="11" width="4" height="4" rx="0.5"/>
+          </svg>
+        </button>
+        <div class="vt-snap-slider-wrap" title="Snap step: ${this.#snapStep}">
+          <input type="range" class="vt-snap-slider" min="0.25" max="10" step="0.25" value="${this.#snapStep}">
+          <span class="vt-snap-value">${this.#snapStep}</span>
+        </div>
       </div>
       <div class="vt-group">
-        ${btn('view-default',   ico.lit,   view === 'default',   'Lit [4]')}
-        ${btn('view-unlit',     ico.unlit, view === 'unlit',     'Unlit [5]')}
-        ${btn('view-wireframe', ico.wire,  view === 'wireframe', 'Wireframe [6]')}
+        ${btn('view-default',   ico.lit,   view === 'default',   'Lit [R]')}
+        ${btn('view-unlit',     ico.unlit, view === 'unlit',     'Unlit [T]')}
+        ${btn('view-wireframe', ico.wire,  view === 'wireframe', 'Wireframe [Y]')}
       </div>
     `;
 
@@ -121,6 +138,10 @@ export class TransformToolbar {
         if (a === 'translate' || a === 'rotate' || a === 'scale') {
           if (a === 'scale' && scaleLocked) return;
           this.#editor.setTransformMode(a);
+        } else if (a === 'snap-toggle') {
+          this.#snapEnabled = !this.#snapEnabled;
+          this.#editor.setSnap(this.#snapEnabled, this.#snapStep);
+          this.#render();
         } else if (a === 'view-default') {
           this.#editor.setViewMode('default');
         } else if (a === 'view-unlit') {
@@ -130,5 +151,16 @@ export class TransformToolbar {
         }
       });
     });
+
+    const slider = this.#el.querySelector('.vt-snap-slider');
+    const valueLabel = this.#el.querySelector('.vt-snap-value');
+    if (slider) {
+      slider.addEventListener('input', () => {
+        this.#snapStep = parseFloat(slider.value);
+        valueLabel.textContent = this.#snapStep;
+        this.#editor.setSnap(this.#snapEnabled, this.#snapStep);
+      });
+      slider.addEventListener('click', (e) => e.stopPropagation());
+    }
   }
 }
