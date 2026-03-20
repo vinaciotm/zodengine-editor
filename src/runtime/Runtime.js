@@ -97,6 +97,13 @@ export class Runtime {
     if (sceneData?.worldData) {
       this.#world.restore(sceneData.worldData, COMPONENT_REGISTRY);
       this.#renderSystem.rebuildAll();
+      // Hide editor-only icons (camera/light sprites, range spheres) during gameplay
+      this.#renderSystem.hideEditorIcons();
+    }
+
+    // Apply scene background color if defined
+    if (sceneData?.background) {
+      this.#scene.background = new THREE.Color(sceneData.background);
     }
 
     // Apply camera entity if present

@@ -10,7 +10,14 @@ export class TopBar {
 
   #docClickHandler = () => { this.#closeMenus(); };
   #keyHandler = (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this.#save(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this.#save(); return; }
+    if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey) {
+      const tag = e.target.tagName;
+      if (tag !== 'INPUT' && tag !== 'SELECT' && tag !== 'TEXTAREA') {
+        e.preventDefault();
+        this.#onRuntime?.();
+      }
+    }
   };
 
   constructor(editor, projectManager, onExit, onRuntime) {
@@ -39,18 +46,20 @@ export class TopBar {
     const name = this.#editor.project.name;
     this.#el.innerHTML = `
       <div class="topbar-menu" id="topbar-menu">
-        <button class="topbar-btn" id="tbtn-scene">Scene</button>
+        <button class="topbar-btn" id="tbtn-editor">Editor</button>
         <button class="topbar-btn" id="tbtn-project">Project</button>
+        <button class="topbar-btn" id="tbtn-scene">Scene</button>
       </div>
       <div class="topbar-title">${this.#esc(name)} &mdash; ${this.#currentSceneName()}</div>
       <div class="topbar-right">
-        <button class="topbar-btn" id="tbtn-play" style="color:var(--success);font-weight:700;padding:0 14px;">&#9654; Play</button>
+        <button class="topbar-btn" id="tbtn-play" title="Play [P]" style="color:var(--success);font-weight:700;padding:0 14px;">&#9654; Play</button>
         <span class="topbar-badge" id="save-badge">Unsaved</span>
       </div>
     `;
 
-    this.#buildSceneMenu();
+    this.#buildEditorMenu();
     this.#buildProjectMenu();
+    this.#buildSceneMenu();
 
     this.#el.querySelector('#tbtn-play').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -66,6 +75,14 @@ export class TopBar {
     });
     this.#editor.on('scene:switched', () => this.#refreshTitle());
     this.#editor.on('scenes:changed', () => this.#rebuildSceneMenu());
+  }
+
+  #buildEditorMenu() {
+    this.#buildDropdown('tbtn-editor', [
+      { label: 'Theme', action: 'editor-theme' },
+      { label: 'Language', action: 'editor-language' },
+      { label: 'Shortcuts', action: 'editor-shortcuts' },
+    ]);
   }
 
   #buildSceneMenu() {
@@ -203,7 +220,10 @@ export class TopBar {
       case 'save-project': this.#saveProject(); break;
       case 'export-project': this.#exportProject(); break;
       case 'export-game': this.#exportGame(); break;
-      case 'settings': showToast('Settings coming soon'); break;
+      case 'editor-theme':
+      case 'editor-language':
+      case 'editor-shortcuts':
+      case 'settings': showToast('Coming soon'); break;
       case 'exit': this.#exit(); break;
     }
   }

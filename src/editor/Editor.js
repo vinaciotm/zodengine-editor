@@ -52,6 +52,7 @@ export class Editor {
   #animFrameId = null;
   #clock = new THREE.Clock();
   #resizeObserver = null;
+  #cameraPreviewOverlay = null;
 
   constructor(project) {
     this.project = project;
@@ -79,12 +80,22 @@ export class Editor {
 
     const grid = new THREE.GridHelper(20, 20, 0x444444, 0x2a2a2a);
     this.threeScene.add(grid);
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
     this.threeScene.add(ambientLight);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(5, 10, 5);
-    dirLight.castShadow = false; // Editor-only light, doesn't cast shadows
-    this.threeScene.add(dirLight);
+    // Editor fill light (not a scene entity)
+    const editorFill = new THREE.DirectionalLight(0xffffff, 0.3);
+    editorFill.position.set(5, 10, 5);
+    editorFill.castShadow = true;
+    editorFill.shadow.mapSize.setScalar(4096);
+    editorFill.shadow.camera.near = 0.1;
+    editorFill.shadow.camera.far = 200;
+    editorFill.shadow.camera.left = -20;
+    editorFill.shadow.camera.right = 20;
+    editorFill.shadow.camera.top = 20;
+    editorFill.shadow.camera.bottom = -20;
+    editorFill.shadow.bias = -0.0003;
+    editorFill.shadow.normalBias = 0.02;
+    this.threeScene.add(editorFill);
 
     this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
     this.orbitControls.enableDamping = true;
@@ -109,7 +120,6 @@ export class Editor {
         tc.scale.copy(obj.scale);
         this.emit('entity:changed', this.selectedEntityId);
       }
-      // Update camera ref if it's a camera entity
       const camComp = this.world.getComponent(this.selectedEntityId, CameraComponent);
       if (camComp) this.#syncCameraRef(this.selectedEntityId, obj, camComp);
     });
@@ -126,6 +136,25 @@ export class Editor {
     this.#resizeObserver = new ResizeObserver(() => this.#onResize());
     this.#resizeObserver.observe(container);
 
+    // Camera preview overlay (border + label, drawn on top of canvas)
+    this.#cameraPreviewOverlay = document.createElement('div');
+    this.#cameraPreviewOverlay.style.cssText = [
+      'position:absolute', 'bottom:8px', 'right:8px',
+      'width:240px', 'height:135px',
+      'border:2px solid rgba(100,160,255,0.75)',
+      'border-radius:4px', 'pointer-events:none',
+      'display:none', 'z-index:10', 'box-sizing:border-box',
+    ].join(';');
+    const previewLabel = document.createElement('div');
+    previewLabel.style.cssText = [
+      'position:absolute', 'top:4px', 'left:6px',
+      'color:rgba(100,180,255,0.9)', 'font-family:system-ui',
+      'font-size:10px', 'letter-spacing:0.3px', 'pointer-events:none',
+    ].join(';');
+    previewLabel.textContent = 'Camera Preview';
+    this.#cameraPreviewOverlay.appendChild(previewLabel);
+    container.appendChild(this.#cameraPreviewOverlay);
+
     this.#animate();
   }
 
@@ -134,9 +163,68 @@ export class Editor {
     const delta = this.#clock.getDelta();
     this.world.update(delta);
     this.orbitControls.update();
+    // Update matrixWorld so helpers and camera preview use current transforms
+    this.threeScene.updateMatrixWorld();
     this.#syncHelpers();
     this.renderer.render(this.threeScene, this.camera);
+    this.#updateCameraPreview();
   };
+
+  #updateCameraPreview() {
+    const overlay = this.#cameraPreviewOverlay;
+    if (!overlay) return;
+
+    const selId = this.selectedEntityId;
+    let camRef = null;
+    if (selId !== null) {
+      const obj = this.renderSystem.getObject3D(selId);
+      camRef = obj?.userData.camRef ?? null;
+    }
+
+    if (!camRef) {
+      overlay.style.display = 'none';
+      return;
+    }
+
+    overlay.style.display = 'block';
+
+    const cw = this.container.clientWidth;
+    const ch = this.container.clientHeight;
+    const pw = 240, ph = 135;
+    const px = cw - pw - 8;
+    const py = ch - ph - 8;
+
+    camRef.aspect = pw / ph;
+    camRef.updateProjectionMatrix();
+
+    // Temporarily hide editor icons and helpers for a clean preview
+    const hiddenIcons = [];
+    this.threeScene.traverse(child => {
+      if ((child.isSprite || child.isMesh) && child.userData.isEditorIcon) {
+        hiddenIcons.push(child);
+        child.visible = false;
+      }
+    });
+    const tcHelper = this.transformControls.getHelper();
+    tcHelper.visible = false;
+    for (const helper of this.#helpers.values()) helper.visible = false;
+
+    const prevAutoClear = this.renderer.autoClear;
+    this.renderer.autoClear = false;
+    this.renderer.setScissorTest(true);
+    this.renderer.setScissor(px, py, pw, ph);
+    this.renderer.setViewport(px, py, pw, ph);
+    this.renderer.clear(true, true, false);
+    this.renderer.render(this.threeScene, camRef);
+    this.renderer.setScissorTest(false);
+    this.renderer.setViewport(0, 0, cw, ch);
+    this.renderer.autoClear = prevAutoClear;
+
+    // Restore visibility
+    for (const icon of hiddenIcons) icon.visible = true;
+    tcHelper.visible = true;
+    for (const helper of this.#helpers.values()) helper.visible = true;
+  }
 
   #onResize = () => {
     if (!this.container) return;
@@ -151,7 +239,6 @@ export class Editor {
 
   setViewMode(mode) {
     this.#viewMode = mode;
-    // Restore all first
     for (const [, obj] of this.renderSystem.entityObjects) {
       obj.traverse(child => {
         if (!child.isMesh || child.userData.isEditorIcon) return;
@@ -185,41 +272,41 @@ export class Editor {
   // --- Helpers (light/camera debug) ---
 
   #syncHelpers() {
-    // Create or update helpers for light/camera entities
+    // Light debug is embedded inside entity groups (RenderSystem) — only cameras need a scene helper
     for (const [entityId, obj] of this.renderSystem.entityObjects) {
-      const lightComp = this.world.getComponent(entityId, LightComponent);
       const camComp = this.world.getComponent(entityId, CameraComponent);
-      if (!lightComp && !camComp) continue;
+      if (!camComp) continue;
 
       if (!this.#helpers.has(entityId)) {
-        let helper = null;
-        if (lightComp) {
-          const lightRef = obj.userData.lightRef;
-          if (lightRef) {
-            if (lightComp.type === 'point') helper = new THREE.PointLightHelper(lightRef, 0.4);
-            else if (lightComp.type === 'directional') helper = new THREE.DirectionalLightHelper(lightRef, 1);
-            else if (lightComp.type === 'spot') helper = new THREE.SpotLightHelper(lightRef);
-          }
-        } else if (camComp) {
-          const camRef = obj.userData.camRef;
-          if (camRef) helper = new THREE.CameraHelper(camRef);
-        }
-        if (helper) {
+        const camRef = obj.userData.camRef;
+        if (camRef) {
+          const helper = new THREE.CameraHelper(camRef);
           this.threeScene.add(helper);
           this.#helpers.set(entityId, helper);
         }
       } else {
-        const helper = this.#helpers.get(entityId);
-        helper.update?.();
+        this.#helpers.get(entityId).update?.();
       }
     }
 
-    // Remove helpers for deleted entities
     for (const [entityId, helper] of this.#helpers) {
       if (!this.renderSystem.entityObjects.has(entityId)) {
         this.threeScene.remove(helper);
         helper.dispose?.();
         this.#helpers.delete(entityId);
+      }
+    }
+  }
+
+  #updateDebugOpacities() {
+    for (const [entityId, obj] of this.renderSystem.entityObjects) {
+      const isSelected = this.selectedEntityIds.has(entityId);
+      const opacity = isSelected ? 1.0 : 0.5;
+      for (const child of obj.children) {
+        if (!child.userData.isEditorIcon) continue;
+        child.traverse(node => {
+          if (node.material) node.material.opacity = opacity;
+        });
       }
     }
   }
@@ -310,6 +397,7 @@ export class Editor {
 
     this.emit('entity:selected', entityId);
     this.emit('selection:changed', this.selectedEntityIds, entityId);
+    this.#updateDebugOpacities();
   }
 
   clearSelection() {
@@ -318,6 +406,7 @@ export class Editor {
     this.transformControls.detach();
     this.emit('entity:selected', null);
     this.emit('selection:changed', this.selectedEntityIds, null);
+    this.#updateDebugOpacities();
   }
 
   setTransformMode(mode) {
@@ -402,7 +491,6 @@ export class Editor {
     this.world.addComponent(id, new TransformComponent());
     setupFn?.(id);
     this.renderSystem.createObjectForEntity(id);
-    // Apply current view mode to new entity
     if (this.#viewMode !== 'default') {
       const obj = this.renderSystem.getObject3D(id);
       if (obj) this.#applyViewModeToObject(obj, this.#viewMode);
@@ -417,19 +505,23 @@ export class Editor {
   spawnCylinder() { return this.spawnEntity('Cylinder', id => this.world.addComponent(id, new MeshComponent('cylinder', 0xffcc4a))); }
   spawnCapsule() { return this.spawnEntity('Capsule', id => this.world.addComponent(id, new MeshComponent('capsule', 0xcc4aff))); }
   spawnPlane() { return this.spawnEntity('Plane', id => this.world.addComponent(id, new MeshComponent('plane', 0x888888))); }
-  spawnPointLight() { return this.spawnEntity('PointLight', id => this.world.addComponent(id, new LightComponent('point', 0xffffff, 1))); }
-  spawnDirectionalLight() { return this.spawnEntity('DirectionalLight', id => this.world.addComponent(id, new LightComponent('directional', 0xffffff, 1))); }
-  spawnSpotLight() { return this.spawnEntity('SpotLight', id => this.world.addComponent(id, new LightComponent('spot', 0xffffff, 1))); }
+  // Use higher default intensities so lights are visible in physical rendering mode
+  spawnPointLight() { return this.spawnEntity('PointLight', id => this.world.addComponent(id, new LightComponent('point', 0xffffff, 100, 1))); }
+  spawnDirectionalLight() { return this.spawnEntity('DirectionalLight', id => this.world.addComponent(id, new LightComponent('directional', 0xffffff, 3))); }
+  spawnSpotLight() { return this.spawnEntity('SpotLight', id => this.world.addComponent(id, new LightComponent('spot', 0xffffff, 100, 1))); }
   spawnSphereTrigger() { return this.spawnEntity('SphereTrigger', id => this.world.addComponent(id, new TriggerComponent('sphere', 1))); }
   spawnBoxTrigger() { return this.spawnEntity('BoxTrigger', id => this.world.addComponent(id, new TriggerComponent('box', 1))); }
   spawnPlayerStart() { return this.spawnEntity('PlayerStart', id => this.world.addComponent(id, new PlayerStartComponent())); }
-  spawnCamera() { return this.spawnEntity('Camera', id => this.world.addComponent(id, new CameraComponent())); }
+  spawnCamera() {
+    return this.spawnEntity('Camera', id => {
+      this.world.addComponent(id, new CameraComponent());
+    });
+  }
 
   deleteEntity(entityId) {
     if (this.selectedEntityId === entityId) this.selectEntity(null);
     this.selectedEntityIds.delete(entityId);
 
-    // Clear helper for this entity
     const helper = this.#helpers.get(entityId);
     if (helper) {
       this.threeScene.remove(helper);
@@ -460,7 +552,6 @@ export class Editor {
   }
 
   rebuildEntityObject(entityId) {
-    // Clear stale helper for this entity
     const oldHelper = this.#helpers.get(entityId);
     if (oldHelper) {
       this.threeScene.remove(oldHelper);
@@ -479,7 +570,6 @@ export class Editor {
       }
     }
 
-    // Re-apply view mode
     if (this.#viewMode !== 'default' && obj) this.#applyViewModeToObject(obj, this.#viewMode);
 
     if (this.selectedEntityId === entityId) {
@@ -497,9 +587,7 @@ export class Editor {
         const hex = parseInt(color.replace('#', ''), 16);
         if (child.userData._origMat) {
           child.userData._origMat.color.set(hex);
-          if (this.#viewMode !== 'default') {
-            child.material.color.set(hex);
-          }
+          if (this.#viewMode !== 'default') child.material.color.set(hex);
         } else {
           child.material.color.set(hex);
         }
@@ -511,14 +599,20 @@ export class Editor {
 
   updateEntityLight(entityId) {
     const lightComp = this.world.getComponent(entityId, LightComponent);
+    if (!lightComp) return;
+
+    if (lightComp.type === 'point' || lightComp.type === 'spot') {
+      // Rebuild to update range visualization (rings for point, cone for spot)
+      this.rebuildEntityObject(entityId);
+      return;
+    }
+
+    // Directional: update light ref in-place
     const obj = this.renderSystem.getObject3D(entityId);
-    if (!obj || !lightComp) return;
-    const lightRef = obj.userData.lightRef;
+    const lightRef = obj?.userData.lightRef;
     if (lightRef) {
       lightRef.color.set(lightComp.color);
       lightRef.intensity = lightComp.intensity;
-    } else {
-      this.rebuildEntityObject(entityId);
     }
   }
 
@@ -529,7 +623,38 @@ export class Editor {
     this.#syncCameraRef(entityId, obj, camComp);
   }
 
+  // --- Scene settings ---
+
+  getSceneName() {
+    return this.#currentScene()?.name ?? 'Scene';
+  }
+
+  getSceneBackground() {
+    const bg = this.threeScene.background;
+    if (bg && bg.isColor) return '#' + bg.getHexString();
+    return '#1a1a1a';
+  }
+
+  setSceneBackground(hexStr) {
+    this.threeScene.background = new THREE.Color(hexStr);
+    const scene = this.#currentScene();
+    if (scene) scene.background = hexStr;
+  }
+
   // --- Scene management ---
+
+  #ensureSceneHasCamera() {
+    const hasCam = this.world.entities.some(id => this.world.getComponent(id, CameraComponent));
+    if (!hasCam) {
+      const id = this.world.createEntity();
+      this.world.addComponent(id, new TagComponent('Camera'));
+      const t = new TransformComponent();
+      t.position.set(0, 2, 5);
+      this.world.addComponent(id, t);
+      this.world.addComponent(id, new CameraComponent());
+      this.renderSystem.createObjectForEntity(id);
+    }
+  }
 
   #loadCurrentScene() {
     this.#clearHelpers();
@@ -541,6 +666,14 @@ export class Editor {
       this.world.clear();
       this.renderSystem.rebuildAll();
     }
+    // Restore scene background
+    if (scene?.background) {
+      this.threeScene.background = new THREE.Color(scene.background);
+    } else {
+      this.threeScene.background = new THREE.Color(0x1a1a1a);
+    }
+    // Every scene must have at least one camera
+    this.#ensureSceneHasCamera();
     // Re-apply view mode after rebuild
     if (this.#viewMode !== 'default') {
       for (const [, obj] of this.renderSystem.entityObjects) {
@@ -555,7 +688,7 @@ export class Editor {
     const scene = this.#currentScene();
     if (scene) {
       scene.worldData = this.world.snapshot();
-      // Capture thumbnail
+      scene.background = this.getSceneBackground();
       try {
         scene.thumbnail = this.renderer.domElement.toDataURL('image/jpeg', 0.4);
       } catch (e) { /* WebGPU may not support toDataURL in all browsers */ }
@@ -636,6 +769,7 @@ export class Editor {
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
     }
+    this.#cameraPreviewOverlay?.remove();
     this.#listeners.clear();
   }
 }

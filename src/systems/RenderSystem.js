@@ -51,14 +51,12 @@ export class RenderSystem {
     this.entityObjects.clear();
     if (!this.world) return;
 
-    // First pass: create all objects
     for (const id of this.world.entities) {
       const obj = this.#buildObject3D(id);
       obj.userData.entityId = id;
       this.entityObjects.set(id, obj);
     }
 
-    // Second pass: handle parent-child
     for (const id of this.world.entities) {
       const obj = this.entityObjects.get(id);
       if (!obj) continue;
@@ -76,6 +74,15 @@ export class RenderSystem {
 
   getObject3D(entityId) { return this.entityObjects.get(entityId) ?? null; }
 
+  // Hide all editor-only visual indicators (sprites, line groups, range rings)
+  hideEditorIcons() {
+    for (const obj of this.entityObjects.values()) {
+      obj.traverse(child => {
+        if (child.userData.isEditorIcon) child.visible = false;
+      });
+    }
+  }
+
   update() {
     for (const [entityId, obj] of this.entityObjects) {
       const t = this.world?.getComponent(entityId, TransformComponent);
@@ -83,6 +90,21 @@ export class RenderSystem {
         obj.position.copy(t.position);
         obj.rotation.copy(t.rotation);
         obj.scale.copy(t.scale);
+
+        // Counter-scale editor icon children so scale gizmo doesn't distort them.
+        // Sprites need their base scale restored; line/mesh debug groups keep world-unit size.
+        const sx = Math.abs(t.scale.x) || 1;
+        const sy = Math.abs(t.scale.y) || 1;
+        const sz = Math.abs(t.scale.z) || 1;
+        for (const child of obj.children) {
+          if (!child.userData.isEditorIcon) continue;
+          if (child.isSprite) {
+            const base = child.userData.baseScale ?? 0.07;
+            child.scale.set(base / sx, base / sy, 1);
+          } else {
+            child.scale.set(1 / sx, 1 / sy, 1 / sz);
+          }
+        }
       }
     }
   }
@@ -127,17 +149,57 @@ export class RenderSystem {
     let light;
 
     switch (comp.type) {
-      case 'directional':
+      case 'directional': {
         light = new THREE.DirectionalLight(comp.color, comp.intensity);
+        light.shadow.mapSize.setScalar(4096);
+        light.shadow.camera.near = 0.1;
+        light.shadow.camera.far = 100;
+        light.shadow.camera.left = -15;
+        light.shadow.camera.right = 15;
+        light.shadow.camera.top = 15;
+        light.shadow.camera.bottom = -15;
+        light.shadow.bias = -0.0003;
+        light.shadow.normalBias = 0.02;
+        // Target inside group → light always shines downward and rotates with entity
+        const dirTarget = new THREE.Object3D();
+        dirTarget.position.set(0, -1, 0);
+        grp.add(dirTarget);
+        light.target = dirTarget;
+        // Embedded debug: flat disc + 4 downward arrows (world-space size, counter-scaled in update)
+        grp.add(this.#makeDirectionalDebug());
         break;
-      case 'spot':
+      }
+      case 'spot': {
         light = new THREE.SpotLight(comp.color, comp.intensity);
         light.angle = Math.PI / 6;
         light.penumbra = 0.2;
+        light.distance = comp.distance ?? 1;
+        light.shadow.mapSize.setScalar(2048);
+        light.shadow.camera.near = 0.1;
+        light.shadow.camera.far = Math.max((comp.distance ?? 1) * 4, 20);
+        light.shadow.bias = -0.0003;
+        light.shadow.normalBias = 0.02;
+        const spotTarget = new THREE.Object3D();
+        spotTarget.position.set(0, -1, 0);
+        grp.add(spotTarget);
+        light.target = spotTarget;
+        // Embedded cone wireframe
+        grp.add(this.#makeSpotDebug(comp.distance ?? 1, Math.PI / 6));
         break;
-      default:
-        light = new THREE.PointLight(comp.color, comp.intensity);
+      }
+      default: {
+        // PointLight: range rings embedded in group (3 orthogonal circles)
+        light = new THREE.PointLight(comp.color, comp.intensity, comp.distance ?? 1, 2);
+        light.shadow.mapSize.setScalar(2048);
+        light.shadow.camera.near = 0.1;
+        light.shadow.camera.far = Math.max((comp.distance ?? 1) * 4, 20);
+        light.shadow.bias = -0.0003;
+        light.shadow.normalBias = 0.02;
+        const rings = this.#makePointLightRings(comp.distance ?? 1);
+        grp.add(rings);
+        grp.userData.rangeRingsRef = rings;
         break;
+      }
     }
 
     light.castShadow = true;
@@ -146,8 +208,96 @@ export class RenderSystem {
 
     const sprite = this.#makeLightSprite(comp.type);
     sprite.userData.isEditorIcon = true;
+    sprite.userData.baseScale = 0.07;
     grp.add(sprite);
 
+    return grp;
+  }
+
+  // Three orthogonal wireframe circles: one horizontal (XZ) + two vertical (XY, YZ)
+  #makePointLightRings(radius) {
+    const grp = new THREE.Group();
+    grp.userData.isEditorIcon = true;
+    const N = 64;
+    const mat = () => new THREE.LineBasicMaterial({
+      color: 0xffcc44, transparent: true, opacity: 0.5, depthWrite: false,
+    });
+
+    const makeCircle = (axisA, axisB) => {
+      const pts = [];
+      for (let i = 0; i <= N; i++) {
+        const a = (i / N) * Math.PI * 2;
+        const v = new THREE.Vector3();
+        v[axisA] = Math.cos(a) * radius;
+        v[axisB] = Math.sin(a) * radius;
+        pts.push(v);
+      }
+      return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat());
+    };
+
+    grp.add(makeCircle('x', 'z')); // horizontal
+    grp.add(makeCircle('x', 'y')); // vertical XY
+    grp.add(makeCircle('y', 'z')); // vertical YZ
+    return grp;
+  }
+
+  // Flat disc + 4 downward arrows indicating direction
+  #makeDirectionalDebug() {
+    const grp = new THREE.Group();
+    grp.userData.isEditorIcon = true;
+    const mat = () => new THREE.LineBasicMaterial({
+      color: 0xffcc00, transparent: true, opacity: 0.5, depthWrite: false,
+    });
+
+    // Disc on XZ plane (radius 0.6)
+    const R = 0.6, N = 32;
+    const discPts = [];
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      discPts.push(new THREE.Vector3(Math.cos(a) * R, 0, Math.sin(a) * R));
+    }
+    grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(discPts), mat()));
+
+    // 4 downward arrows at compass points
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const ax = Math.cos(a) * R, az = Math.sin(a) * R;
+      const shaft = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(ax, 0, az),
+        new THREE.Vector3(ax, -1.2, az),
+      ]), mat());
+      grp.add(shaft);
+    }
+    return grp;
+  }
+
+  // Wireframe cone pointing downward (tip at origin)
+  #makeSpotDebug(range, angle) {
+    const grp = new THREE.Group();
+    grp.userData.isEditorIcon = true;
+    const mat = () => new THREE.LineBasicMaterial({
+      color: 0xffaa44, transparent: true, opacity: 0.5, depthWrite: false,
+    });
+
+    const r = Math.max(range, 0.1) * Math.tan(angle);
+    const N = 32;
+
+    // Ring at cone base (below entity, in -Y direction)
+    const ringPts = [];
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      ringPts.push(new THREE.Vector3(Math.cos(a) * r, -range, Math.sin(a) * r));
+    }
+    grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ringPts), mat()));
+
+    // 4 lines from tip to ring
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(Math.cos(a) * r, -range, Math.sin(a) * r),
+      ]), mat()));
+    }
     return grp;
   }
 
@@ -160,12 +310,91 @@ export class RenderSystem {
 
     const sprite = this.#makeCameraSprite();
     sprite.userData.isEditorIcon = true;
+    sprite.userData.baseScale = 0.08;
     grp.add(sprite);
 
     return grp;
   }
 
+  // Video/film camera sprite
   #makeCameraSprite() {
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    const cx = size / 2, cy = size / 2;
+
+    const glow = ctx.createRadialGradient(cx, cy, 8, cx, cy, 52);
+    glow.addColorStop(0, 'rgba(80,200,255,0.25)');
+    glow.addColorStop(1, 'rgba(80,200,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, 52, 0, Math.PI * 2); ctx.fill();
+
+    // Camera body (wide horizontal — video camera)
+    const bx = 18, by = 40, bw = 70, bh = 42;
+    const bodyGrad = ctx.createLinearGradient(bx, by, bx, by + bh);
+    bodyGrad.addColorStop(0, '#5a9adc');
+    bodyGrad.addColorStop(1, '#1a4a88');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 5); ctx.fill();
+    ctx.strokeStyle = '#88ccff'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 5); ctx.stroke();
+
+    // Lens housing
+    ctx.fillStyle = '#1a3a66';
+    ctx.beginPath(); ctx.roundRect(78, 50, 22, 22, 4); ctx.fill();
+
+    // Lens barrel
+    const lcx = 91, lcy = 61;
+    ctx.strokeStyle = '#44aadd'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(lcx, lcy, 11, 0, Math.PI * 2); ctx.stroke();
+    const lensGrad = ctx.createRadialGradient(lcx - 3, lcy - 3, 1, lcx, lcy, 9);
+    lensGrad.addColorStop(0, '#bbddff');
+    lensGrad.addColorStop(0.4, '#2277bb');
+    lensGrad.addColorStop(1, '#081828');
+    ctx.fillStyle = lensGrad;
+    ctx.beginPath(); ctx.arc(lcx, lcy, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath(); ctx.ellipse(lcx - 3, lcy - 3, 3, 4, -0.4, 0, Math.PI * 2); ctx.fill();
+
+    // Viewfinder eyepiece (left)
+    ctx.fillStyle = '#2a5a99';
+    ctx.beginPath(); ctx.roundRect(8, 46, 20, 11, 2); ctx.fill();
+    ctx.strokeStyle = '#88ccff'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(8, 46, 20, 11, 2); ctx.stroke();
+
+    // Top handle
+    ctx.fillStyle = '#2a5a99';
+    ctx.beginPath(); ctx.roundRect(34, 28, 38, 14, 4); ctx.fill();
+    ctx.strokeStyle = '#88ccff'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(34, 28, 38, 14, 4); ctx.stroke();
+    ctx.strokeStyle = 'rgba(136,204,255,0.4)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      const hx = 40 + i * 9;
+      ctx.beginPath(); ctx.moveTo(hx, 30); ctx.lineTo(hx, 40); ctx.stroke();
+    }
+
+    // Record indicator (red dot)
+    ctx.fillStyle = '#ff3333';
+    ctx.beginPath(); ctx.arc(cx - 2, 36, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,200,200,0.6)';
+    ctx.beginPath(); ctx.arc(cx - 3, 35, 2, 0, Math.PI * 2); ctx.fill();
+
+    // Tally light
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath(); ctx.arc(26, 48, 3, 0, Math.PI * 2); ctx.fill();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({
+      map: texture, sizeAttenuation: false, depthTest: true, transparent: true, opacity: 0.5,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.08, 0.08, 1);
+    return sprite;
+  }
+
+  #makeLightSprite(type) {
     const size = 128;
     const canvas = document.createElement('canvas');
     canvas.width = size; canvas.height = size;
@@ -173,72 +402,8 @@ export class RenderSystem {
     const cx = size / 2, cy = size / 2;
     ctx.clearRect(0, 0, size, size);
 
-    // Outer glow
-    const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 52);
-    glow.addColorStop(0, 'rgba(80,200,255,0.3)');
-    glow.addColorStop(1, 'rgba(80,200,255,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(cx, cy, 52, 0, Math.PI * 2); ctx.fill();
-
-    // Camera body
-    const bw = 66, bh = 38, br = 5;
-    const bx = cx - bw / 2, by = cy - 8;
-    const bodyGrad = ctx.createLinearGradient(bx, by, bx, by + bh);
-    bodyGrad.addColorStop(0, '#4a90cc');
-    bodyGrad.addColorStop(1, '#1a4a88');
-    ctx.fillStyle = bodyGrad;
-    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, br); ctx.fill();
-    ctx.strokeStyle = '#88ccff'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, br); ctx.stroke();
-
-    // Viewfinder bump on top
-    const vfw = 22, vfh = 12;
-    const vfx = cx - vfw / 2, vfy = by - vfh + 2;
-    ctx.fillStyle = '#2a6aaa';
-    ctx.beginPath(); ctx.roundRect(vfx, vfy, vfw, vfh, 3); ctx.fill();
-    ctx.strokeStyle = '#88ccff'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(vfx, vfy, vfw, vfh, 3); ctx.stroke();
-
-    // Shutter button
-    ctx.fillStyle = '#88bbdd';
-    ctx.beginPath(); ctx.arc(cx + 20, vfy + 5, 5, 0, Math.PI * 2); ctx.fill();
-
-    // Lens outer ring
-    const lcx = cx, lcy = cy + 8;
-    ctx.strokeStyle = '#55aadd'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(lcx, lcy, 17, 0, Math.PI * 2); ctx.stroke();
-
-    // Lens body
-    const lensGrad = ctx.createRadialGradient(lcx - 5, lcy - 5, 2, lcx, lcy, 14);
-    lensGrad.addColorStop(0, '#aaddff');
-    lensGrad.addColorStop(0.35, '#3388cc');
-    lensGrad.addColorStop(1, '#0a1a33');
-    ctx.fillStyle = lensGrad;
-    ctx.beginPath(); ctx.arc(lcx, lcy, 14, 0, Math.PI * 2); ctx.fill();
-
-    // Lens shine
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.beginPath(); ctx.ellipse(lcx - 5, lcy - 4, 4, 6, -0.4, 0, Math.PI * 2); ctx.fill();
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: texture, sizeAttenuation: false, depthTest: true, transparent: true });
-    const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(0.07, 0.07, 1);
-    return sprite;
-  }
-
-  #makeLightSprite(type) {
-    const size = 128;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    const cx = size / 2;
-    const cy = size / 2;
-
-    ctx.clearRect(0, 0, size, size);
-
     if (type === 'directional') {
+      // Sun — centered at canvas center = entity position
       const rayLen = 22, rayWidth = 4, innerR = 22;
       const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 48);
       glow.addColorStop(0, 'rgba(255,200,50,0.35)');
@@ -246,9 +411,7 @@ export class RenderSystem {
       ctx.fillStyle = glow;
       ctx.beginPath(); ctx.arc(cx, cy, 48, 0, Math.PI * 2); ctx.fill();
       ctx.save();
-      ctx.strokeStyle = '#ffcc00';
-      ctx.lineWidth = rayWidth;
-      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#ffcc00'; ctx.lineWidth = rayWidth; ctx.lineCap = 'round';
       for (let i = 0; i < 8; i++) {
         const angle = (i / 8) * Math.PI * 2;
         const x1 = cx + Math.cos(angle) * (innerR + 4);
@@ -268,89 +431,94 @@ export class RenderSystem {
       ctx.beginPath(); ctx.arc(cx - 7, cy - 7, 8, 0, Math.PI * 2); ctx.fill();
 
     } else if (type === 'spot') {
-      const glow = ctx.createRadialGradient(cx, cy - 20, 5, cx, cy, 55);
+      // Spotlight — tip (lens) at canvas center = entity position
+      const glow = ctx.createRadialGradient(cx, cy, 5, cx, cy + 20, 55);
       glow.addColorStop(0, 'rgba(255,200,100,0.3)');
       glow.addColorStop(1, 'rgba(255,150,50,0)');
       ctx.fillStyle = glow;
-      ctx.beginPath(); ctx.arc(cx, cy, 55, 0, Math.PI * 2); ctx.fill();
-      const coneTop = cy - 14;
-      const coneBot = cy + 48;
-      const coneW = 38;
-      const beamGrad = ctx.createLinearGradient(cx, coneTop, cx, coneBot);
+      ctx.beginPath(); ctx.arc(cx, cy + 20, 50, 0, Math.PI * 2); ctx.fill();
+
+      const coneTopY = cy;      // entity position = canvas center
+      const coneBot = cy + 50;  // cone extends below
+      const coneW = 34;
+      const beamGrad = ctx.createLinearGradient(cx, coneTopY, cx, coneBot);
       beamGrad.addColorStop(0, 'rgba(255,220,80,0.7)');
       beamGrad.addColorStop(1, 'rgba(255,180,50,0.05)');
       ctx.fillStyle = beamGrad;
       ctx.beginPath();
-      ctx.moveTo(cx, coneTop);
+      ctx.moveTo(cx, coneTopY);
       ctx.lineTo(cx - coneW, coneBot);
       ctx.lineTo(cx + coneW, coneBot);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,200,80,0.6)';
-      ctx.lineWidth = 1.5;
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,200,80,0.6)'; ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(cx, coneTop); ctx.lineTo(cx - coneW, coneBot);
-      ctx.moveTo(cx, coneTop); ctx.lineTo(cx + coneW, coneBot);
+      ctx.moveTo(cx, coneTopY); ctx.lineTo(cx - coneW, coneBot);
+      ctx.moveTo(cx, coneTopY); ctx.lineTo(cx + coneW, coneBot);
       ctx.stroke();
-      const hw = 30, hh = 20, hr = 5;
-      const hx = cx - hw / 2, hy = cy - 36;
+
+      // Housing above center
+      const hw = 28, hh = 18, hr = 4;
+      const hx = cx - hw / 2, hy = coneTopY - hh;
       const housingGrad = ctx.createLinearGradient(hx, 0, hx + hw, 0);
       housingGrad.addColorStop(0, '#444');
       housingGrad.addColorStop(0.5, '#888');
       housingGrad.addColorStop(1, '#333');
       ctx.fillStyle = housingGrad;
       ctx.beginPath(); ctx.roundRect(hx, hy, hw, hh, hr); ctx.fill();
-      const lensGrad = ctx.createRadialGradient(cx - 3, coneTop - 2, 1, cx, coneTop, 11);
+
+      // Lens at entity position (canvas center)
+      const lensGrad = ctx.createRadialGradient(cx - 3, coneTopY - 2, 1, cx, coneTopY, 10);
       lensGrad.addColorStop(0, '#ffffff');
       lensGrad.addColorStop(0.3, '#fff8cc');
       lensGrad.addColorStop(0.7, '#ffcc44');
       lensGrad.addColorStop(1, '#ff8800');
       ctx.fillStyle = lensGrad;
-      ctx.beginPath(); ctx.arc(cx, coneTop, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, coneTopY, 10, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(cx, coneTop, 11, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, coneTopY, 10, 0, Math.PI * 2); ctx.stroke();
+
+      // Mount above housing
       ctx.fillStyle = '#555';
       ctx.fillRect(cx - 4, hy - 8, 8, 10);
       ctx.beginPath(); ctx.arc(cx, hy - 8, 4, 0, Math.PI * 2); ctx.fill();
 
     } else {
+      // Point light bulb — centered at canvas center = entity position
       const glow = ctx.createRadialGradient(cx, cy, 8, cx, cy, 52);
       glow.addColorStop(0, 'rgba(255,240,100,0.4)');
       glow.addColorStop(1, 'rgba(255,240,100,0)');
       ctx.fillStyle = glow;
       ctx.beginPath(); ctx.arc(cx, cy, 52, 0, Math.PI * 2); ctx.fill();
-      const bulbGrad = ctx.createRadialGradient(cx - 8, cy - 8, 2, cx, cy, 24);
+
+      const bulbGrad = ctx.createRadialGradient(cx - 8, cy - 8, 2, cx, cy, 22);
       bulbGrad.addColorStop(0, '#fffde0');
       bulbGrad.addColorStop(0.35, '#ffe566');
       bulbGrad.addColorStop(0.7, '#ffb700');
       bulbGrad.addColorStop(1, '#ff8000');
       ctx.fillStyle = bulbGrad;
-      ctx.beginPath(); ctx.arc(cx, cy - 4, 24, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-      ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(cx, cy, 22, 0, Math.PI * 2); ctx.fill();
+
+      // Filament
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(cx - 6, cy + 6); ctx.lineTo(cx - 6, cy - 6);
-      ctx.lineTo(cx, cy - 12);
-      ctx.lineTo(cx + 6, cy - 6); ctx.lineTo(cx + 6, cy + 6);
+      ctx.moveTo(cx - 6, cy + 8); ctx.lineTo(cx - 6, cy - 4);
+      ctx.lineTo(cx, cy - 10); ctx.lineTo(cx + 6, cy - 4); ctx.lineTo(cx + 6, cy + 8);
       ctx.stroke();
+
+      // Base below bulb
       const baseGrad = ctx.createLinearGradient(cx - 12, 0, cx + 12, 0);
-      baseGrad.addColorStop(0, '#666');
-      baseGrad.addColorStop(0.5, '#aaa');
-      baseGrad.addColorStop(1, '#555');
+      baseGrad.addColorStop(0, '#666'); baseGrad.addColorStop(0.5, '#aaa'); baseGrad.addColorStop(1, '#555');
       ctx.fillStyle = baseGrad;
-      ctx.beginPath(); ctx.roundRect(cx - 12, cy + 19, 24, 8, 2); ctx.fill();
-      ctx.fillRect(cx - 8, cy + 27, 16, 4);
-      ctx.fillRect(cx - 6, cy + 31, 12, 3);
+      ctx.beginPath(); ctx.roundRect(cx - 11, cy + 21, 22, 7, 2); ctx.fill();
+      ctx.fillRect(cx - 7, cy + 28, 14, 4);
+      ctx.fillRect(cx - 5, cy + 32, 10, 3);
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.beginPath(); ctx.ellipse(cx - 8, cy - 10, 6, 9, -0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx - 7, cy - 8, 5, 8, -0.4, 0, Math.PI * 2); ctx.fill();
     }
 
     const texture = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({
-      map: texture,
-      sizeAttenuation: false,
-      depthTest: true,
-      transparent: true,
+      map: texture, sizeAttenuation: false, depthTest: true, transparent: true, opacity: 0.5,
     });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(0.07, 0.07, 1);

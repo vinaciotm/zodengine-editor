@@ -23,6 +23,11 @@ export class InspectorPanel {
     this.#unsubs.push(
       this.#editor.on('entity:selected', () => this.#render()),
       this.#editor.on('entity:changed', () => this.#renderTransformValues()),
+      this.#editor.on('scene:switched', () => this.#render()),
+      this.#editor.on('scenes:changed', () => {
+        // Re-render only if showing scene settings (nothing selected)
+        if (this.#editor.selectedEntityId === null) this.#render();
+      }),
     );
   }
 
@@ -42,7 +47,7 @@ export class InspectorPanel {
     const entityId = this.#editor.selectedEntityId;
 
     if (entityId === null) {
-      content.innerHTML = '<div class="inspector-empty">Select an entity to inspect</div>';
+      this.#renderSceneSettings(content);
       return;
     }
 
@@ -90,6 +95,51 @@ export class InspectorPanel {
     // Trigger
     const trigger = world.getComponent(entityId, TriggerComponent);
     if (trigger) content.appendChild(this.#buildTriggerSection(entityId, trigger));
+  }
+
+  #renderSceneSettings(content) {
+    const name = this.#editor.getSceneName();
+    const bg = this.#editor.getSceneBackground();
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding:8px 12px;';
+
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:10px;text-transform:uppercase;color:var(--text-muted,#888);letter-spacing:0.5px;margin-bottom:10px;';
+    label.textContent = 'Scene Settings';
+    wrap.appendChild(label);
+
+    // Scene name row
+    const nameRow = document.createElement('div');
+    nameRow.className = 'inspector-row';
+    nameRow.innerHTML = '<span class="inspector-label">Name</span>';
+    const nameInp = document.createElement('input');
+    nameInp.className = 'inspector-input';
+    nameInp.value = name;
+    nameInp.style.flex = '1';
+    nameInp.addEventListener('change', () => {
+      this.#editor.renameScene(this.#editor.currentSceneIndex, nameInp.value.trim() || name);
+    });
+    nameRow.appendChild(nameInp);
+    wrap.appendChild(nameRow);
+
+    // Background color row
+    const bgRow = document.createElement('div');
+    bgRow.className = 'inspector-row';
+    bgRow.style.marginTop = '6px';
+    bgRow.innerHTML = '<span class="inspector-label">Background</span>';
+    const bgInp = document.createElement('input');
+    bgInp.type = 'color';
+    bgInp.className = 'inspector-input';
+    bgInp.value = bg;
+    bgInp.style.cssText = 'width:44px;padding:1px 2px;height:24px;cursor:pointer;';
+    bgInp.addEventListener('input', () => {
+      this.#editor.setSceneBackground(bgInp.value);
+    });
+    bgRow.appendChild(bgInp);
+    wrap.appendChild(bgRow);
+
+    content.appendChild(wrap);
   }
 
   #buildTransformSection(entityId, transform) {
@@ -216,10 +266,26 @@ export class InspectorPanel {
     intRow.innerHTML = '<span class="inspector-label">Intensity</span>';
     const intField = document.createElement('div');
     intField.className = 'inspector-field-axis';
-    const intInp = numInput(light.intensity, (val) => { light.intensity = Math.max(0, val); this.#editor.updateEntityLight(entityId); }, 0.1);
+    const intInp = numInput(light.intensity, (val) => { light.intensity = Math.max(0, val); this.#editor.updateEntityLight(entityId); }, 1);
     intField.appendChild(intInp);
     intRow.appendChild(intField);
     body.appendChild(intRow);
+
+    // Range (distance) — only relevant for point and spot
+    if (light.type === 'point' || light.type === 'spot') {
+      const distRow = document.createElement('div');
+      distRow.className = 'inspector-row';
+      distRow.innerHTML = '<span class="inspector-label">Range</span>';
+      const distField = document.createElement('div');
+      distField.className = 'inspector-field-axis';
+      const distInp = numInput(light.distance ?? 10, (val) => {
+        light.distance = Math.max(0.1, val);
+        this.#editor.updateEntityLight(entityId);
+      }, 0.5);
+      distField.appendChild(distInp);
+      distRow.appendChild(distField);
+      body.appendChild(distRow);
+    }
 
     return sec;
   }

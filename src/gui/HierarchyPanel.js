@@ -13,6 +13,7 @@ export class HierarchyPanel {
   #editor = null;
   #unsubs = [];
   #contentEl = null;
+  #collapsedGroups = new Set();
 
   constructor(editor) { this.#editor = editor; }
 
@@ -76,6 +77,7 @@ export class HierarchyPanel {
       const icon = this.#getIcon(id);
       const isSelected = selIds.has(id) || id === sel;
       const isGroup = editor.world.hasComponent(id, GroupComponent);
+      const isCollapsed = isGroup && this.#collapsedGroups.has(id);
 
       const row = document.createElement('div');
       row.className = 'hierarchy-item' + (isSelected ? ' selected' : '');
@@ -83,7 +85,19 @@ export class HierarchyPanel {
 
       const indentEl = document.createElement('span');
       indentEl.className = 'hierarchy-item-indent';
-      indentEl.style.width = (16 + depth * 16) + 'px';
+      indentEl.style.width = (depth * 16) + 'px';
+
+      const collapseEl = document.createElement('span');
+      collapseEl.className = 'hierarchy-collapse-btn';
+      if (isGroup) {
+        collapseEl.textContent = isCollapsed ? '▶' : '▼';
+        collapseEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (this.#collapsedGroups.has(id)) this.#collapsedGroups.delete(id);
+          else this.#collapsedGroups.add(id);
+          this.#render();
+        });
+      }
 
       const iconEl = document.createElement('span');
       iconEl.className = 'hierarchy-item-icon';
@@ -118,6 +132,7 @@ export class HierarchyPanel {
       actionsEl.appendChild(delBtn);
 
       row.appendChild(indentEl);
+      row.appendChild(collapseEl);
       row.appendChild(iconEl);
       row.appendChild(nameEl);
       row.appendChild(actionsEl);
@@ -156,7 +171,7 @@ export class HierarchyPanel {
 
       content.appendChild(row);
 
-      if (isGroup) {
+      if (isGroup && !isCollapsed) {
         const children = entities.filter(cid => {
           const p = editor.world.getComponent(cid, ParentComponent);
           return p?.parentId === id;
