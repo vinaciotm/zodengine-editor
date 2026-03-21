@@ -119,7 +119,7 @@ export class PrefabsPanel {
         btn.innerHTML = `<span class="asset-icon">${item.icon}</span><span class="asset-label">${item.label}</span>`;
         btn.addEventListener('click', () => {
           const id = spawnMap[item.spawn]?.();
-          if (id !== undefined) { sfx.in(); this.#editor.selectEntity(id); }
+          if (id !== undefined) { this.#editor.selectEntity(id); }
         });
         grid.appendChild(btn);
       }

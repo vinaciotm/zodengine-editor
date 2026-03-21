@@ -340,16 +340,15 @@ body {
 /* Floating panel re-open buttons (shown when panel is fully collapsed) */
 .panel-float-bar {
     position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
+    top: 8px;
     display: flex;
-    flex-direction: column;
-    gap: 5px;
+    flex-direction: row;
+    gap: 4px;
     z-index: 60;
     pointer-events: none;
 }
-.panel-float-left { left: 6px; }
-.panel-float-right { right: 6px; }
+.panel-float-left { left: 8px; }
+.panel-float-right { right: 8px; }
 .panel-float-btn {
     pointer-events: auto;
     width: 30px;

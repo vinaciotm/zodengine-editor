@@ -370,7 +370,8 @@ export class Editor {
       for (const child of obj.children) {
         if (!child.userData.isEditorIcon) continue;
         child.traverse((node) => {
-          if (node.material) node.material.opacity = opacity;
+          // Skip sprites — keep their original material opacity
+          if (node.material && !node.isSprite) node.material.opacity = opacity;
         });
       }
     }

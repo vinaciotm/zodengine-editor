@@ -327,14 +327,14 @@ export class TopBar {
   #save() {
     this.#editor.saveProject();
     this.#projectManager.saveProject(this.#editor.project);
-    sfx.save();
+    sfx.check();
     showToast('Scene saved', 'success');
   }
 
   #saveProject() {
     this.#editor.saveProject();
     this.#projectManager.saveProject(this.#editor.project);
-    sfx.save();
+    sfx.check();
     showToast('Project saved', 'success');
   }
 
