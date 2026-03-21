@@ -34,6 +34,7 @@ export class PrefabsPanel {
       ambiente: [
         { spawn: 'ambientlight', icon: '&#127774;', label: 'Ambient' },
         { spawn: 'fog',          icon: '&#127568;', label: 'Fog' },
+        { spawn: 'sky',          icon: '&#127771;', label: 'SkyBox' },
       ],
       jogo: [
         { spawn: 'camera',        icon: '&#127909;', label: 'Camera' },
@@ -66,6 +67,7 @@ export class PrefabsPanel {
       playerstart:  () => this.#editor.spawnPlayerStart(),
       ambientlight: () => this.#editor.spawnAmbientLight(),
       fog:          () => this.#editor.spawnFog(),
+      sky:          () => this.#editor.spawnSky(),
     };
 
     this.#el.innerHTML = `

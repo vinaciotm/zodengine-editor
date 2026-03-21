@@ -1,4 +1,6 @@
 import { sfx } from './sfx.js';
+import { showConfirm } from './utils.js';
+import { TagComponent } from '../components/TagComponent.js';
 
 export class TransformToolbar {
   #el = null;
@@ -42,9 +44,12 @@ export class TransformToolbar {
       else if (e.key === 't' || e.key === 'T') { sfx.click(); this.#editor.setViewMode('unlit'); }
       else if (e.key === 'y' || e.key === 'Y') { sfx.click(); this.#editor.setViewMode('wireframe'); }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (this.#editor.selectedEntityId !== null) {
-          sfx.save();
-          this.#editor.deleteEntity(this.#editor.selectedEntityId);
+        const id = this.#editor.selectedEntityId;
+        if (id !== null) {
+          const entityName = this.#editor.world.getComponent(id, TagComponent)?.name ?? 'Entity';
+          showConfirm('Delete Entity', `Delete "${entityName}"?`, 'Delete').then(ok => {
+            if (ok) { sfx.save(); this.#editor.deleteEntity(id); }
+          });
         }
       }
     };

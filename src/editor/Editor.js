@@ -21,6 +21,7 @@ import { GroupComponent } from "../components/GroupComponent.js";
 import { ParentComponent } from "../components/ParentComponent.js";
 import { CameraComponent } from "../components/CameraComponent.js";
 import { FogComponent } from "../components/FogComponent.js";
+import { SkyBoxComponent } from "../components/SkyBoxComponent.js";
 
 const COMPONENT_REGISTRY = {
   TagComponent,
@@ -33,6 +34,7 @@ const COMPONENT_REGISTRY = {
   ParentComponent,
   CameraComponent,
   FogComponent,
+  SkyBoxComponent,
 };
 
 function uuid() {
@@ -68,6 +70,15 @@ export class Editor {
   #listeners = new Map();
   container = null;
   #animFrameId = null;
+  #rotateCursorUrl = (() => {
+    const svg = encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">` +
+      `<path d="M12 3a9 9 0 1 1-8.5 6" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>` +
+      `<polygon points="3,3 4,9 9,7" fill="white"/>` +
+      `</svg>`
+    );
+    return `url("data:image/svg+xml,${svg}") 12 12, alias`;
+  })();
   #clock = new THREE.Clock();
   #resizeObserver = null;
   #cameraPreviewOverlay = null;
@@ -102,7 +113,10 @@ export class Editor {
     await this.renderer.init();
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(container.clientWidth, container.clientHeight);
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 0.5;
     container.appendChild(this.renderer.domElement);
 
     this.#grid = new THREE.GridHelper(100, 100, 0x444444, 0x2a2a2a);
@@ -113,6 +127,15 @@ export class Editor {
       this.renderer.domElement,
     );
     this.orbitControls.enableDamping = false;
+    this.orbitControls.addEventListener('end', () => {
+      const scene = this.#currentScene();
+      if (scene) {
+        scene.editorCamera = {
+          position: this.camera.position.toArray(),
+          target: this.orbitControls.target.toArray(),
+        };
+      }
+    });
 
     this.transformControls = new TransformControls(
       this.camera,
@@ -164,7 +187,8 @@ export class Editor {
 
     this.world = new World();
     this.renderSystem = new RenderSystem(this.threeScene);
-    this.renderSystem.shadowsEnabled = false;
+    this.renderSystem.renderer = this.renderer;
+    this.renderSystem.shadowsEnabled = true;
     this.renderSystem.setParentComponentClass(ParentComponent);
     this.world.addSystem(this.renderSystem);
 
@@ -173,6 +197,7 @@ export class Editor {
     this.renderer.domElement.addEventListener("pointerdown",  this.#onPointerDown);
     this.renderer.domElement.addEventListener("pointermove",  this.#onPointerMove);
     this.renderer.domElement.addEventListener("pointerup",    this.#onPointerUp);
+    this.renderer.domElement.addEventListener("pointermove",  this.#onGizmoCursor);
 
     this.#resizeObserver = new ResizeObserver(() => this.#onResize());
     this.#resizeObserver.observe(container);
@@ -425,6 +450,19 @@ export class Editor {
       hitObj = hitObj.parent;
     return hitObj?.userData.entityId ?? null;
   }
+
+  #onGizmoCursor = () => {
+    const axis = this.transformControls?.axis;
+    const el = this.renderer?.domElement;
+    if (!el) return;
+    if (!axis) { el.style.cursor = ''; return; }
+    switch (this.transformMode) {
+      case 'translate': el.style.cursor = 'move'; break;
+      case 'rotate':    el.style.cursor = this.#rotateCursorUrl; break;
+      case 'scale':     el.style.cursor = 'nwse-resize'; break;
+      default:          el.style.cursor = '';
+    }
+  };
 
   #onPointerDown = (e) => {
     if (e.button !== 0) return;
@@ -773,12 +811,11 @@ export class Editor {
     );
   }
   spawnDirectionalLight() {
-    return this.spawnEntity("DirectionalLight", (id) =>
-      this.world.addComponent(
-        id,
-        new LightComponent("directional", 0xffffff, 1),
-      ),
-    );
+    return this.spawnEntity("DirectionalLight", (id) => {
+      const t = this.world.getComponent(id, TransformComponent);
+      if (t) t.rotation.z = -Math.PI / 4;
+      this.world.addComponent(id, new LightComponent("directional", 0xffffff, 1));
+    });
   }
   spawnSpotLight() {
     return this.spawnEntity("SpotLight", (id) =>
@@ -815,14 +852,26 @@ export class Editor {
       this.world.addComponent(id, new FogComponent(0xaaaaaa, 10, 100)),
     );
   }
+  spawnSky() {
+    return this.spawnEntity("SkyBox", (id) =>
+      this.world.addComponent(id, new SkyBoxComponent()),
+    );
+  }
 
-  // Returns true for entity types where scale doesn't apply (camera, lights)
+  // Returns true for entity types where scale doesn't apply (camera, lights, sky)
   isScaleLocked(entityId) {
     if (entityId === null) return false;
     return (
       this.world.hasComponent(entityId, CameraComponent) ||
-      this.world.hasComponent(entityId, LightComponent)
+      this.world.hasComponent(entityId, LightComponent) ||
+      this.world.hasComponent(entityId, SkyBoxComponent)
     );
+  }
+
+  // Returns true for entity types where rotation doesn't apply (sky)
+  isRotationLocked(entityId) {
+    if (entityId === null) return false;
+    return this.world.hasComponent(entityId, SkyBoxComponent);
   }
 
   isEntityVisible(entityId) {
@@ -1005,15 +1054,71 @@ export class Editor {
     }
   }
 
+  #spawnDefaultScene() {
+    // Camera
+    const camId = this.world.createEntity();
+    this.world.addComponent(camId, new TagComponent("Camera"));
+    const ct = new TransformComponent();
+    ct.position.set(0, 2, 10);
+    this.world.addComponent(camId, ct);
+    this.world.addComponent(camId, new CameraComponent());
+    this.renderSystem.createObjectForEntity(camId);
+
+    // Directional Light
+    const dlId = this.world.createEntity();
+    this.world.addComponent(dlId, new TagComponent("Directional Light"));
+    const dt = new TransformComponent();
+    dt.position.set(3, 6, 4);
+    dt.rotation.z = -Math.PI / 4;
+    this.world.addComponent(dlId, dt);
+    this.world.addComponent(dlId, new LightComponent("directional", 0xffffff, 1));
+    this.renderSystem.createObjectForEntity(dlId);
+
+    // Ambient Light
+    const alId = this.world.createEntity();
+    this.world.addComponent(alId, new TagComponent("Ambient Light"));
+    this.world.addComponent(alId, new TransformComponent());
+    this.world.addComponent(alId, new LightComponent("ambient", 0xffffff, 0.5));
+    this.renderSystem.createObjectForEntity(alId);
+
+    // SkyBox
+    const skyId = this.world.createEntity();
+    this.world.addComponent(skyId, new TagComponent("SkyBox"));
+    this.world.addComponent(skyId, new TransformComponent());
+    this.world.addComponent(skyId, new SkyBoxComponent());
+    this.renderSystem.createObjectForEntity(skyId);
+
+    // Cube
+    const cubeId = this.world.createEntity();
+    this.world.addComponent(cubeId, new TagComponent("Cube"));
+    const cubet = new TransformComponent();
+    cubet.position.set(0, 0.5, 0);
+    this.world.addComponent(cubeId, cubet);
+    this.world.addComponent(cubeId, new MeshComponent("box", 0x4a9eff));
+    this.renderSystem.createObjectForEntity(cubeId);
+
+    // Plane (floor)
+    const planeId = this.world.createEntity();
+    this.world.addComponent(planeId, new TagComponent("Plane"));
+    const pt = new TransformComponent();
+    pt.rotation.set(-Math.PI / 2, 0, 0);
+    pt.scale.set(10, 10, 1);
+    this.world.addComponent(planeId, pt);
+    this.world.addComponent(planeId, new MeshComponent("plane", 0x888888));
+    this.renderSystem.createObjectForEntity(planeId);
+  }
+
   #loadCurrentScene() {
     this.#clearHelpers();
     const scene = this.#currentScene();
     if (scene?.worldData) {
       this.world.restore(scene.worldData, COMPONENT_REGISTRY);
       this.renderSystem.rebuildAll();
+      this.#ensureSceneHasCamera();
     } else {
       this.world.clear();
       this.renderSystem.rebuildAll();
+      this.#spawnDefaultScene();
     }
     // Restore scene background
     if (scene?.background) {
@@ -1021,8 +1126,16 @@ export class Editor {
     } else {
       this.threeScene.background = new THREE.Color(0x1a1a1a);
     }
-    // Every scene must have at least one camera
-    this.#ensureSceneHasCamera();
+    // Restore per-scene editor camera
+    if (scene?.editorCamera) {
+      this.camera.position.fromArray(scene.editorCamera.position);
+      this.orbitControls.target.fromArray(scene.editorCamera.target);
+      this.orbitControls.update();
+    } else {
+      this.camera.position.set(5, 5, 8);
+      this.orbitControls.target.set(0, 0, 0);
+      this.orbitControls.update();
+    }
     // Re-apply view mode after rebuild
     if (this.#viewMode !== "default") {
       for (const [, obj] of this.renderSystem.entityObjects) {
@@ -1136,6 +1249,7 @@ export class Editor {
     this.renderer.domElement.removeEventListener("pointerdown", this.#onPointerDown);
     this.renderer.domElement.removeEventListener("pointermove", this.#onPointerMove);
     this.renderer.domElement.removeEventListener("pointerup",   this.#onPointerUp);
+    this.renderer.domElement.removeEventListener("pointermove", this.#onGizmoCursor);
     this.orbitControls.dispose();
     this.transformControls.dispose();
     this.renderer.dispose();

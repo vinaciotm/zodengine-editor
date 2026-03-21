@@ -51,6 +51,20 @@ export class ProjectManager {
     if (p) { p.name = name; this.#save(projects); }
   }
 
+  duplicateProject(id) {
+    const projects = this.getProjects();
+    const src = projects.find(p => p.id === id);
+    if (!src) return;
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.id = uuid();
+    copy.name = src.name + ' Copy';
+    copy.createdAt = new Date().toISOString();
+    copy.updatedAt = new Date().toISOString();
+    projects.push(copy);
+    this.#save(projects);
+    return copy;
+  }
+
   importProject(jsonString) {
     const project = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
     if (!project.id || !project.scenes) throw new Error('Invalid project format');

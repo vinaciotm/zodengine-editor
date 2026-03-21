@@ -133,6 +133,7 @@ export class Dashboard {
     gearDropdown.className = 'project-card-gear-dropdown';
     gearDropdown.innerHTML = `
       <div class="gear-item" data-action="rename">Rename</div>
+      <div class="gear-item" data-action="duplicate">Duplicate</div>
       <div class="gear-item" data-action="export">Export</div>
       <div class="gear-item danger" data-action="delete">Delete</div>
     `;
@@ -156,6 +157,7 @@ export class Dashboard {
       const action = e.target.dataset.action;
       this.#closeGear();
       if (action === 'rename') this.#renameProject(project.id);
+      else if (action === 'duplicate') this.#duplicateProject(project.id);
       else if (action === 'export') this.#exportProject(project.id);
       else if (action === 'delete') this.#deleteProject(project.id);
     });
@@ -302,8 +304,7 @@ export class Dashboard {
     if (!name) return;
     const project = this.#projectManager.createProject(name);
     sfx.check();
-    showToast(`Project "${project.name}" created`, 'success');
-    this.#render();
+    this.#onOpen(project);
   }
 
   async #renameProject(id) {
@@ -313,6 +314,15 @@ export class Dashboard {
     if (!name) return;
     this.#projectManager.renameProject(id, name);
     sfx.check();
+    this.#render();
+  }
+
+  #duplicateProject(id) {
+    const project = this.#projectManager.getProject(id);
+    if (!project) return;
+    this.#projectManager.duplicateProject(id);
+    sfx.check();
+    showToast(`"${project.name}" duplicated`);
     this.#render();
   }
 

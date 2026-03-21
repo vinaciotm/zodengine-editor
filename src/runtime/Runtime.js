@@ -11,11 +11,12 @@ import { GroupComponent } from '../components/GroupComponent.js';
 import { ParentComponent } from '../components/ParentComponent.js';
 import { CameraComponent } from '../components/CameraComponent.js';
 import { FogComponent } from '../components/FogComponent.js';
+import { SkyBoxComponent } from '../components/SkyBoxComponent.js';
 
 const COMPONENT_REGISTRY = {
   TagComponent, TransformComponent, MeshComponent, LightComponent,
   TriggerComponent, PlayerStartComponent, GroupComponent, ParentComponent,
-  CameraComponent, FogComponent,
+  CameraComponent, FogComponent, SkyBoxComponent,
 };
 
 export class Runtime {
@@ -97,11 +98,14 @@ export class Runtime {
     this.#renderer.setSize(viewport.clientWidth, viewport.clientHeight);
     this.#renderer.shadowMap.enabled = true;
     this.#renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.#renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.#renderer.toneMappingExposure = 0.5;
     viewport.appendChild(this.#renderer.domElement);
 
     // ECS
     this.#world = new World();
     this.#renderSystem = new RenderSystem(this.#scene);
+    this.#renderSystem.renderer = this.#renderer;
     this.#renderSystem.setParentComponentClass(ParentComponent);
     this.#world.addSystem(this.#renderSystem);
 

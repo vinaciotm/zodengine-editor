@@ -7,10 +7,13 @@ import { PlayerStartComponent } from '../components/PlayerStartComponent.js';
 import { GroupComponent } from '../components/GroupComponent.js';
 import { CameraComponent } from '../components/CameraComponent.js';
 import { FogComponent } from '../components/FogComponent.js';
+import { SkyBoxComponent } from '../components/SkyBoxComponent.js';
+import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 
 export class RenderSystem {
   world = null;
   scene = null;
+  renderer = null;
   entityObjects = new Map();
   lightingEnabled = true;
   shadowsEnabled = true;
@@ -41,15 +44,26 @@ export class RenderSystem {
     const obj = this.entityObjects.get(entityId);
     if (obj) {
       if (obj.userData.isFogEntity) this.scene.fog = null;
+      if (obj.userData.isSkyEntity) this.#removeSkyMesh(obj);
       if (obj.parent) obj.parent.remove(obj);
       else this.scene.remove(obj);
       this.entityObjects.delete(entityId);
     }
   }
 
+  #removeSkyMesh(markerObj) {
+    const sky = markerObj.userData.skyMeshRef;
+    if (sky && sky.parent) sky.parent.remove(sky);
+    markerObj.userData.skyMeshRef = null;
+  }
+
   rebuildAll() {
     // Clear scene-level effects that are driven by entity components
     this.scene.fog = null;
+    // Remove any existing sky meshes
+    for (const obj of this.entityObjects.values()) {
+      if (obj.userData.isSkyEntity) this.#removeSkyMesh(obj);
+    }
 
     for (const obj of this.entityObjects.values()) {
       if (obj.parent) obj.parent.remove(obj);
@@ -138,6 +152,33 @@ export class RenderSystem {
         continue;
       }
 
+      // Sky entities: sync SkyMesh uniforms
+      if (obj.userData.isSkyEntity) {
+        const skyMeshRef = obj.userData.skyMeshRef;
+        if (!obj.visible) {
+          if (skyMeshRef && skyMeshRef.parent) skyMeshRef.parent.remove(skyMeshRef);
+          continue;
+        } else if (skyMeshRef && !skyMeshRef.parent) {
+          this.scene.add(skyMeshRef);
+        }
+        const sky = this.world?.getComponent(entityId, SkyBoxComponent);
+        if (sky && obj.userData.skyMeshRef) {
+          const m = obj.userData.skyMeshRef;
+          m.turbidity.value = sky.turbidity;
+          m.rayleigh.value = sky.rayleigh;
+          m.mieCoefficient.value = sky.mieCoefficient;
+          m.mieDirectionalG.value = sky.mieDirectionalG;
+          m.cloudCoverage.value = sky.cloudCoverage;
+          m.cloudDensity.value = sky.cloudDensity;
+          m.cloudElevation.value = sky.cloudElevation;
+          const phi = THREE.MathUtils.degToRad(90 - sky.elevation);
+          const theta = THREE.MathUtils.degToRad(sky.azimuth);
+          m.sunPosition.value.setFromSphericalCoords(1, phi, theta);
+          if (this.renderer) this.renderer.toneMappingExposure = sky.exposure;
+        }
+        continue;
+      }
+
       const t = this.world?.getComponent(entityId, TransformComponent);
       if (t) {
         obj.position.copy(t.position);
@@ -171,6 +212,7 @@ export class RenderSystem {
     const group = w?.getComponent(entityId, GroupComponent);
     const camera = w?.getComponent(entityId, CameraComponent);
     const fog = w?.getComponent(entityId, FogComponent);
+    const sky = w?.getComponent(entityId, SkyBoxComponent);
 
     if (group) return new THREE.Group();
     if (mesh) return this.#makeMesh(mesh);
@@ -182,6 +224,30 @@ export class RenderSystem {
       const marker = new THREE.Object3D();
       marker.userData.isFogEntity = true;
       this.scene.fog = new THREE.Fog(fog.color, fog.near, fog.far);
+      return marker;
+    }
+    if (sky) {
+      const marker = new THREE.Object3D();
+      marker.userData.isSkyEntity = true;
+      const sprite = this.#makeSkySprite();
+      sprite.userData.isEditorIcon = true;
+      sprite.userData.baseScale = 0.07;
+      marker.add(sprite);
+      const skyMesh = new SkyMesh();
+      skyMesh.material.fog = false;
+      skyMesh.scale.setScalar(450000);
+      skyMesh.turbidity.value = sky.turbidity;
+      skyMesh.rayleigh.value = sky.rayleigh;
+      skyMesh.mieCoefficient.value = sky.mieCoefficient;
+      skyMesh.mieDirectionalG.value = sky.mieDirectionalG;
+      skyMesh.cloudCoverage.value = sky.cloudCoverage;
+      skyMesh.cloudDensity.value = sky.cloudDensity;
+      skyMesh.cloudElevation.value = sky.cloudElevation;
+      const phi = THREE.MathUtils.degToRad(90 - sky.elevation);
+      const theta = THREE.MathUtils.degToRad(sky.azimuth);
+      skyMesh.sunPosition.value.setFromSphericalCoords(1, phi, theta);
+      this.scene.add(skyMesh);
+      marker.userData.skyMeshRef = skyMesh;
       return marker;
     }
     return new THREE.Object3D();
@@ -493,7 +559,7 @@ export class RenderSystem {
 
     const texture = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({
-      map: texture, sizeAttenuation: false, depthTest: true, transparent: true, opacity: 0.5,
+      map: texture, sizeAttenuation: false, depthTest: true, transparent: true, opacity: 1.0,
     });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(0.08, 0.08, 1);
@@ -624,7 +690,7 @@ export class RenderSystem {
 
     const texture = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({
-      map: texture, sizeAttenuation: false, depthTest: true, transparent: true, opacity: 0.5,
+      map: texture, sizeAttenuation: false, depthTest: true, transparent: true, opacity: 1.0,
     });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(0.07, 0.07, 1);
@@ -639,6 +705,60 @@ export class RenderSystem {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.userData.isEditorOnly = true;
     return mesh;
+  }
+
+  #makeSkySprite() {
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const cx = size / 2, cy = size / 2;
+    ctx.clearRect(0, 0, size, size);
+
+    // Sky background gradient
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, size);
+    skyGrad.addColorStop(0, '#1a78c8');
+    skyGrad.addColorStop(0.6, '#5ab4f0');
+    skyGrad.addColorStop(1, '#f0e8c8');
+    ctx.fillStyle = skyGrad;
+    ctx.beginPath(); ctx.arc(cx, cy, 52, 0, Math.PI * 2); ctx.fill();
+
+    // Sun
+    const sunGrad = ctx.createRadialGradient(cx, cy - 14, 3, cx, cy - 14, 18);
+    sunGrad.addColorStop(0, '#fff8cc');
+    sunGrad.addColorStop(0.4, '#ffdd00');
+    sunGrad.addColorStop(1, '#ff8800');
+    ctx.fillStyle = sunGrad;
+    ctx.beginPath(); ctx.arc(cx, cy - 14, 18, 0, Math.PI * 2); ctx.fill();
+
+    // Rays
+    ctx.strokeStyle = '#ffcc00'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const r1 = 22, r2 = 30;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(angle) * r1, cy - 14 + Math.sin(angle) * r1);
+      ctx.lineTo(cx + Math.cos(angle) * r2, cy - 14 + Math.sin(angle) * r2);
+      ctx.stroke();
+    }
+
+    // Cloud
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.ellipse(cx + 10, cy + 24, 20, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx - 4, cy + 22, 14, 9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 24, cy + 26, 12, 8, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Border circle
+    ctx.strokeStyle = 'rgba(100,180,255,0.6)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, 51, 0, Math.PI * 2); ctx.stroke();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({
+      map: texture, sizeAttenuation: false, depthTest: true, transparent: true, opacity: 1.0,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.07, 0.07, 1);
+    return sprite;
   }
 
   #makePlayerStart() {

@@ -1,4 +1,4 @@
-import { makeCollapsiblePanel } from './utils.js';
+import { makeCollapsiblePanel, showConfirm } from './utils.js';
 import { sfx } from './sfx.js';
 import { TagComponent } from '../components/TagComponent.js';
 import { MeshComponent } from '../components/MeshComponent.js';
@@ -190,8 +190,10 @@ export class HierarchyPanel {
 
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        sfx.save();
-        editor.deleteEntity(id);
+        const entityName = editor.world.getComponent(id, TagComponent)?.name ?? 'Entity';
+        showConfirm('Delete Entity', `Delete "${entityName}"?`, 'Delete').then(ok => {
+          if (ok) { sfx.save(); editor.deleteEntity(id); }
+        });
       });
 
       content.appendChild(row);

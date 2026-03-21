@@ -8,6 +8,7 @@ import { TriggerComponent } from '../components/TriggerComponent.js';
 import { ParentComponent } from '../components/ParentComponent.js';
 import { CameraComponent } from '../components/CameraComponent.js';
 import { FogComponent } from '../components/FogComponent.js';
+import { SkyBoxComponent } from '../components/SkyBoxComponent.js';
 
 export class InspectorPanel {
   #el = null;
@@ -39,7 +40,10 @@ export class InspectorPanel {
 
     this.#render();
     this.#unsubs.push(
-      this.#editor.on('entity:selected', () => this.#render()),
+      this.#editor.on('entity:selected', () => {
+        if (this.#editor.selectedEntityId !== null && this.#contentEl.style.display === 'none') header.click();
+        this.#render();
+      }),
       this.#editor.on('entity:changed', () => this.#renderTransformValues()),
       this.#editor.on('scene:switched', () => this.#render()),
       this.#editor.on('scenes:changed', () => {
@@ -108,6 +112,10 @@ export class InspectorPanel {
     // Fog
     const fog = world.getComponent(entityId, FogComponent);
     if (fog) content.appendChild(this.#buildFogSection(entityId, fog));
+
+    // SkyBox
+    const sky = world.getComponent(entityId, SkyBoxComponent);
+    if (sky) content.appendChild(this.#buildSkyBoxSection(entityId, sky));
 
     // Trigger
     const trigger = world.getComponent(entityId, TriggerComponent);
@@ -202,11 +210,14 @@ export class InspectorPanel {
       axis => transform.position[axis],
       (axis, val) => { transform.position[axis] = val; sync(); }
     ));
-    body.appendChild(makeVec3Block('Rotation',
-      axis => transform.rotation[axis] * 180 / Math.PI,
-      (axis, val) => { transform.rotation[axis] = val * Math.PI / 180; sync(); },
-      1
-    ));
+    const isRotationLocked = this.#editor.isRotationLocked(entityId);
+    if (!isRotationLocked) {
+      body.appendChild(makeVec3Block('Rotation',
+        axis => transform.rotation[axis] * 180 / Math.PI,
+        (axis, val) => { transform.rotation[axis] = val * Math.PI / 180; sync(); },
+        1
+      ));
+    }
     // Scale is hidden for cameras and lights (not applicable)
     const isScaleLocked = this.#editor.isScaleLocked(entityId);
     if (!isScaleLocked) {
@@ -469,6 +480,35 @@ export class InspectorPanel {
     };
     mkRow('Near', () => fog.near, v => { fog.near = Math.max(0, v); }, 0.5);
     mkRow('Far',  () => fog.far,  v => { fog.far  = Math.max(fog.near + 0.1, v); }, 1);
+
+    return sec;
+  }
+
+  #buildSkyBoxSection(entityId, sky) {
+    const sec = this.#section('SkyBox', 'skybox-section');
+    const body = sec.querySelector('.inspector-section-body');
+
+    const mkRow = (label, get, set, step, min, max) => {
+      const row = document.createElement('div');
+      row.className = 'inspector-row';
+      row.innerHTML = `<span class="inspector-label">${label}</span>`;
+      const field = document.createElement('div');
+      field.className = 'inspector-field-axis';
+      field.appendChild(dragNum(get(), v => set(Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v))), step));
+      row.appendChild(field);
+      body.appendChild(row);
+    };
+
+    mkRow('Turbidity',     () => sky.turbidity,        v => { sky.turbidity = v; },        0.1, 0, 20);
+    mkRow('Rayleigh',      () => sky.rayleigh,          v => { sky.rayleigh = v; },          0.01, 0, 4);
+    mkRow('Mie Coeff',     () => sky.mieCoefficient,    v => { sky.mieCoefficient = v; },    0.0001, 0, 0.1);
+    mkRow('Mie Dir G',     () => sky.mieDirectionalG,   v => { sky.mieDirectionalG = v; },   0.01, 0, 1);
+    mkRow('Elevation',     () => sky.elevation,         v => { sky.elevation = v; },         0.1, -90, 90);
+    mkRow('Azimuth',       () => sky.azimuth,           v => { sky.azimuth = v; },           1, 0, 360);
+    mkRow('Exposure',      () => sky.exposure,          v => { sky.exposure = v; },          0.01, 0, 2);
+    mkRow('Cloud Cover',   () => sky.cloudCoverage,     v => { sky.cloudCoverage = v; },     0.01, 0, 1);
+    mkRow('Cloud Density', () => sky.cloudDensity,      v => { sky.cloudDensity = v; },      0.01, 0, 1);
+    mkRow('Cloud Elev',    () => sky.cloudElevation,    v => { sky.cloudElevation = v; },    0.01, 0, 1);
 
     return sec;
   }

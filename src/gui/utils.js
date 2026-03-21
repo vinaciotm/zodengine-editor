@@ -19,9 +19,11 @@ export function showModal(title, label, defaultValue = '') {
     overlay.querySelector('#modal-ok').addEventListener('click', () => finish(input.value.trim() || null));
     overlay.querySelector('#modal-cancel').addEventListener('click', () => finish(null));
     input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
       if (e.key === 'Enter') finish(input.value.trim() || null);
       if (e.key === 'Escape') finish(null);
     });
+    overlay.addEventListener('keydown', (e) => e.stopPropagation());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(null); });
   });
 }
@@ -52,9 +54,11 @@ export function showNewSceneModal() {
     overlay.querySelector('#modal-ok').addEventListener('click', () => finish(input.value.trim() || null, cb.checked));
     overlay.querySelector('#modal-cancel').addEventListener('click', () => finish(null, false));
     input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
       if (e.key === 'Enter') finish(input.value.trim() || null, cb.checked);
       if (e.key === 'Escape') finish(null, false);
     });
+    overlay.addEventListener('keydown', (e) => e.stopPropagation());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(null, false); });
   });
 }
@@ -184,10 +188,47 @@ export function showConfirm(title, message, confirmLabel = 'Confirm') {
       </div>
     `;
     document.body.appendChild(overlay);
+    const okBtn = overlay.querySelector('#modal-ok');
     const finish = (val) => { overlay.remove(); resolve(val); };
-    overlay.querySelector('#modal-ok').addEventListener('click', () => finish(true));
+    okBtn.addEventListener('click', () => finish(true));
     overlay.querySelector('#modal-cancel').addEventListener('click', () => finish(false));
-    overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') finish(false); });
+    overlay.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') finish(true);
+      if (e.key === 'Escape') finish(false);
+    });
     overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(false); });
+    setTimeout(() => okBtn.focus(), 0);
+  });
+}
+
+// Returns 'save' | 'reload' | 'cancel'
+export function showReloadDialog() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal">
+        <h2>Reload Page</h2>
+        <p class="modal-msg">Save project before reloading?</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+          <button class="btn btn-secondary" id="modal-reload">Reload</button>
+          <button class="btn btn-primary" id="modal-save">Save &amp; Reload</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const finish = (val) => { overlay.remove(); resolve(val); };
+    overlay.querySelector('#modal-save').addEventListener('click', () => finish('save'));
+    overlay.querySelector('#modal-reload').addEventListener('click', () => finish('reload'));
+    overlay.querySelector('#modal-cancel').addEventListener('click', () => finish('cancel'));
+    overlay.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') finish('save');
+      if (e.key === 'Escape') finish('cancel');
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) finish('cancel'); });
+    setTimeout(() => overlay.querySelector('#modal-save').focus(), 0);
   });
 }
