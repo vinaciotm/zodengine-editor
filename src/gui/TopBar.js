@@ -148,6 +148,7 @@ export class TopBar {
       ['blue','Blue'],['red','Red'],['purple','Purple'],['pink','Pink'],
       ['flat','Flat'],['flat-orange','Flat Orange'],['flat-green','Flat Green'],
       ['flat-blue','Flat Blue'],['flat-red','Flat Red'],['flat-purple','Flat Purple'],['flat-pink','Flat Pink'],
+      ['light','Light'],['flat-light','Flat Light'],
     ].forEach(([val, label]) => {
       const opt = document.createElement('option');
       opt.value = val; opt.textContent = label;
@@ -165,6 +166,7 @@ export class TopBar {
     dropdown.appendChild(this.#makeSep());
     dropdown.appendChild(this.#makeItem('Exit to Dashboard', 'exit', true));
 
+    dropdown.addEventListener('click', (e) => e.stopPropagation());
     btn.appendChild(dropdown);
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -189,6 +191,7 @@ export class TopBar {
       const dropdown = document.createElement('div');
       dropdown.className = 'topbar-dropdown';
       dropdown.id = 'dropdown-scene';
+      dropdown.addEventListener('click', (e) => e.stopPropagation());
 
       const staticTop = [
         { label: '&#10010; New Scene', action: 'new-scene' },
@@ -294,6 +297,7 @@ export class TopBar {
     btn.style.position = 'relative';
     const dropdown = document.createElement('div');
     dropdown.className = 'topbar-dropdown';
+    dropdown.addEventListener('click', (e) => e.stopPropagation());
     for (const item of items) {
       if (item.sep) { dropdown.appendChild(this.#makeSep()); continue; }
       dropdown.appendChild(this.#makeItem(item.label, item.action, item.danger));
@@ -341,7 +345,7 @@ export class TopBar {
   async #exit() {
     const ok = await showConfirm('Exit to Dashboard', 'Unsaved changes will be lost.', 'Exit');
     if (!ok) return;
-    sfx.out();
+    sfx.drop();
     this.#onExit();
   }
 

@@ -106,22 +106,24 @@ export class TransformToolbar {
       `<button class="vt-btn${active ? ' active' : ''}${disabled ? ' vt-btn-disabled' : ''}" data-action="${cls}" title="${title}"${disabled ? ' disabled' : ''}>${icon}</button>`;
 
     this.#el.innerHTML = `
-      <div class="vt-group">
-        ${btn('translate', ico.translate, mode === 'translate', 'Position [Q]')}
-        ${btn('rotate',    ico.rotate,    mode === 'rotate',    'Rotation [W]')}
-        ${btn('scale',     ico.scale,     mode === 'scale',     'Scale [E]', scaleLocked)}
-      </div>
-      <div class="vt-group vt-snap-group">
-        <button class="vt-btn vt-snap-btn${this.#snapEnabled ? ' active' : ''}" data-action="snap-toggle" title="Grid Snap">
-          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="1" y="1" width="4" height="4" rx="0.5"/><rect x="6" y="1" width="4" height="4" rx="0.5"/><rect x="11" y="1" width="4" height="4" rx="0.5"/>
-            <rect x="1" y="6" width="4" height="4" rx="0.5"/><rect x="6" y="6" width="4" height="4" rx="0.5"/><rect x="11" y="6" width="4" height="4" rx="0.5"/>
-            <rect x="1" y="11" width="4" height="4" rx="0.5"/><rect x="6" y="11" width="4" height="4" rx="0.5"/><rect x="11" y="11" width="4" height="4" rx="0.5"/>
-          </svg>
-        </button>
-        <div class="vt-snap-slider-wrap" title="Snap step: ${this.#snapStep}">
-          <input type="range" class="vt-snap-slider" min="0.25" max="10" step="0.25" value="${this.#snapStep}">
-          <span class="vt-snap-value">${this.#snapStep}</span>
+      <div class="vt-left">
+        <div class="vt-group">
+          ${btn('translate', ico.translate, mode === 'translate', 'Position [Q]')}
+          ${btn('rotate',    ico.rotate,    mode === 'rotate',    'Rotation [W]')}
+          ${btn('scale',     ico.scale,     mode === 'scale',     'Scale [E]', scaleLocked)}
+        </div>
+        <div class="vt-group vt-snap-group">
+          <button class="vt-btn vt-snap-btn${this.#snapEnabled ? ' active' : ''}" data-action="snap-toggle" title="Grid Snap">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="1" width="4" height="4" rx="0.5"/><rect x="6" y="1" width="4" height="4" rx="0.5"/><rect x="11" y="1" width="4" height="4" rx="0.5"/>
+              <rect x="1" y="6" width="4" height="4" rx="0.5"/><rect x="6" y="6" width="4" height="4" rx="0.5"/><rect x="11" y="6" width="4" height="4" rx="0.5"/>
+              <rect x="1" y="11" width="4" height="4" rx="0.5"/><rect x="6" y="11" width="4" height="4" rx="0.5"/><rect x="11" y="11" width="4" height="4" rx="0.5"/>
+            </svg>
+          </button>
+          <div class="vt-snap-slider-wrap" title="Snap step: ${this.#snapStep}">
+            <input type="range" class="vt-snap-slider" min="0.25" max="10" step="0.25" value="${this.#snapStep}">
+            <span class="vt-snap-value">${this.#snapStep}</span>
+          </div>
         </div>
       </div>
       <div class="vt-group">

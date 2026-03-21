@@ -54,9 +54,10 @@ export class HierarchyPanel {
     const sel = this.#editor.selectedEntityId;
     const selIds = this.#editor.selectedEntityIds;
     if (!this.#contentEl) return;
+    const selStr = sel !== null ? String(sel) : null;
     this.#contentEl.querySelectorAll('.hierarchy-item').forEach(row => {
       const id = row.dataset.entityId;
-      const isSelected = (sel !== null && sel === id) || selIds.has(id);
+      const isSelected = (selStr !== null && selStr === id) || [...selIds].some(s => String(s) === id);
       row.classList.toggle('selected', isSelected);
     });
   }
@@ -87,7 +88,7 @@ export class HierarchyPanel {
       const tag = editor.world.getComponent(id, TagComponent);
       const name = tag?.name ?? `Entity ${id}`;
       const icon = this.#getIcon(id);
-      const isSelected = selIds.has(id) || id === sel;
+      const isSelected = (sel !== null && String(sel) === String(id)) || [...selIds].some(s => String(s) === String(id));
       const isGroup = editor.world.hasComponent(id, GroupComponent);
       const isCollapsed = isGroup && this.#collapsedGroups.has(id);
 

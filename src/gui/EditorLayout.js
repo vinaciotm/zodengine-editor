@@ -108,18 +108,20 @@ export class EditorLayout {
     leftFloat.appendChild(scenesFloatBtn);
     leftFloat.appendChild(hierFloatBtn);
 
-    const rightFloatBtn = makeFloatBtn('📄', 'Detalhes');
+    const rightFloatBtn = makeFloatBtn('⚙️', 'Propriedades');
     rightFloat.appendChild(rightFloatBtn);
 
     const updateLeftNarrow = () => {
       const isNarrow = !scenesOpen && !hierOpen;
       left.classList.toggle('narrow', isNarrow);
       leftFloat.style.display = isNarrow ? 'flex' : 'none';
+      center.classList.toggle('left-narrow', isNarrow);
     };
 
     const updateRightNarrow = () => {
       right.classList.toggle('narrow', !rightOpen);
       rightFloat.style.display = rightOpen ? 'none' : 'flex';
+      center.classList.toggle('right-narrow', !rightOpen);
     };
 
     // Hook Cenários header: track state + narrow

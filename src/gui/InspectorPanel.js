@@ -27,7 +27,7 @@ export class InspectorPanel {
     // Persistent header (survives re-renders)
     const header = document.createElement('div');
     header.className = 'panel-header';
-    header.innerHTML = '<span class="ph-icon">&#128196;</span><span class="ph-text"> Detalhes</span>';
+    header.innerHTML = '<span class="ph-icon">&#9881;</span><span class="ph-text"> Propriedades</span>';
     this.#el.appendChild(header);
 
     this.#contentEl = document.createElement('div');

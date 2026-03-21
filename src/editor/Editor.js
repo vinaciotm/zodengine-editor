@@ -1067,6 +1067,7 @@ export class Editor {
       id: uuid(),
       name,
       worldData: copyCurrentScene ? this.world.snapshot() : null,
+      background: copyCurrentScene ? this.getSceneBackground() : undefined,
     };
     this.project.scenes.push(newScene);
     this.emit("scenes:changed");

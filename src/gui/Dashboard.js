@@ -8,7 +8,7 @@ export class Dashboard {
   #openGear = null;
   #docClick = () => {
     this.#closeGear();
-    this.#el?.querySelectorAll('.topbar-dropdown').forEach(d => d.classList.remove('open'));
+    this.#closeMenus();
   };
 
   constructor(projectManager, onOpen) {
@@ -39,6 +39,10 @@ export class Dashboard {
       this.#openGear.classList.remove('open');
       this.#openGear = null;
     }
+  }
+
+  #closeMenus() {
+    this.#el?.querySelectorAll('.topbar-dropdown').forEach(d => d.classList.remove('open'));
   }
 
   #render() {
@@ -198,6 +202,7 @@ export class Dashboard {
       ['blue','Blue'],['red','Red'],['purple','Purple'],['pink','Pink'],
       ['flat','Flat'],['flat-orange','Flat Orange'],['flat-green','Flat Green'],
       ['flat-blue','Flat Blue'],['flat-red','Flat Red'],['flat-purple','Flat Purple'],['flat-pink','Flat Pink'],
+      ['light','Light'],['flat-light','Flat Light'],
     ].forEach(([val, label]) => {
       const opt = document.createElement('option');
       opt.value = val; opt.textContent = label;
@@ -239,10 +244,13 @@ export class Dashboard {
     });
     dropdown.appendChild(exitItem);
 
+    dropdown.addEventListener('click', (e) => e.stopPropagation());
     btn.appendChild(dropdown);
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      dropdown.classList.toggle('open');
+      const isOpen = dropdown.classList.contains('open');
+      this.#closeMenus();
+      if (!isOpen) dropdown.classList.add('open');
     });
   }
 
@@ -274,10 +282,13 @@ export class Dashboard {
     });
     dropdown.appendChild(importItem);
 
+    dropdown.addEventListener('click', (e) => e.stopPropagation());
     btn.appendChild(dropdown);
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      dropdown.classList.toggle('open');
+      const isOpen = dropdown.classList.contains('open');
+      this.#closeMenus();
+      if (!isOpen) dropdown.classList.add('open');
     });
   }
 
@@ -305,10 +316,11 @@ export class Dashboard {
     this.#render();
   }
 
-  #deleteProject(id) {
+  async #deleteProject(id) {
     const project = this.#projectManager.getProject(id);
     if (!project) return;
-    if (!confirm(`Delete project "${project.name}"? This cannot be undone.`)) return;
+    const ok = await showConfirm('Delete Project', `Delete "${project.name}"? This cannot be undone.`, 'Delete');
+    if (!ok) return;
     this.#projectManager.deleteProject(id);
     sfx.out();
     showToast('Project deleted');
@@ -344,7 +356,7 @@ export class Dashboard {
         showToast(`Imported: ${project.name}`, 'success');
         this.#render();
       } catch (e) {
-        alert('Failed to import: ' + e.message);
+        showToast('Failed to import: ' + e.message, 'error');
       }
     });
   }

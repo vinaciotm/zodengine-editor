@@ -1,4 +1,4 @@
-import { showNewSceneModal, makeCollapsiblePanel } from './utils.js';
+import { showNewSceneModal, makeCollapsiblePanel, showConfirm } from './utils.js';
 import { sfx } from './sfx.js';
 
 export class ScenesPanel {
@@ -73,9 +73,10 @@ export class ScenesPanel {
         <span class="scene-item-name" title="${this.#esc(scene.name)}">${this.#esc(scene.name)}</span>
         ${scenes.length > 1 ? `<span class="scene-item-del" title="Delete">&#215;</span>` : ''}
       `;
-      item.addEventListener('click', (e) => {
+      item.addEventListener('click', async (e) => {
         if (e.target.classList.contains('scene-item-del')) {
-          if (!confirm(`Delete scene "${scene.name}"?`)) return;
+          const ok = await showConfirm('Delete Scene', `Delete scene "${scene.name}"?`, 'Delete');
+          if (!ok) return;
           sfx.out();
           this.#editor.deleteScene(idx);
           return;
