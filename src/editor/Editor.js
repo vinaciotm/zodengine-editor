@@ -119,7 +119,7 @@ export class Editor {
     this.renderer.toneMappingExposure = 0.5;
     container.appendChild(this.renderer.domElement);
 
-    this.#grid = new THREE.GridHelper(100, 100, 0x444444, 0x2a2a2a);
+    this.#grid = new THREE.GridHelper(80, 80, 0x444444, 0x2a2a2a);
     this.threeScene.add(this.#grid);
 
     this.orbitControls = new OrbitControls(
@@ -806,21 +806,25 @@ export class Editor {
   }
   // Use higher default intensities so lights are visible in physical rendering mode
   spawnPointLight() {
-    return this.spawnEntity("PointLight", (id) =>
-      this.world.addComponent(id, new LightComponent("point", 0xffffff, 1, 1)),
-    );
+    return this.spawnEntity("PointLight", (id) => {
+      const t = this.world.getComponent(id, TransformComponent);
+      if (t) t.position.set(0, 3, 5);
+      this.world.addComponent(id, new LightComponent("point", 0xffffff, 1, 2));
+    });
   }
   spawnDirectionalLight() {
     return this.spawnEntity("DirectionalLight", (id) => {
       const t = this.world.getComponent(id, TransformComponent);
-      if (t) t.rotation.z = -Math.PI / 4;
+      if (t) { t.position.set(0, 3, 5); t.rotation.z = -Math.PI / 4; }
       this.world.addComponent(id, new LightComponent("directional", 0xffffff, 1));
     });
   }
   spawnSpotLight() {
-    return this.spawnEntity("SpotLight", (id) =>
-      this.world.addComponent(id, new LightComponent("spot", 0xffffff, 1, 1)),
-    );
+    return this.spawnEntity("SpotLight", (id) => {
+      const t = this.world.getComponent(id, TransformComponent);
+      if (t) t.position.set(0, 3, 5);
+      this.world.addComponent(id, new LightComponent("spot", 0xffffff, 1, 1));
+    });
   }
   spawnSphereTrigger() {
     return this.spawnEntity("SphereTrigger", (id) =>
@@ -839,13 +843,17 @@ export class Editor {
   }
   spawnCamera() {
     return this.spawnEntity("Camera", (id) => {
+      const t = this.world.getComponent(id, TransformComponent);
+      if (t) t.position.set(0, 3, 5);
       this.world.addComponent(id, new CameraComponent());
     });
   }
   spawnAmbientLight() {
-    return this.spawnEntity("AmbientLight", (id) =>
-      this.world.addComponent(id, new LightComponent("ambient", 0xffffff, 0.5)),
-    );
+    return this.spawnEntity("AmbientLight", (id) => {
+      const t = this.world.getComponent(id, TransformComponent);
+      if (t) t.position.set(0, 3, 5);
+      this.world.addComponent(id, new LightComponent("ambient", 0xffffff, 0.5));
+    });
   }
   spawnFog() {
     return this.spawnEntity("Fog", (id) =>
@@ -1097,15 +1105,15 @@ export class Editor {
     this.world.addComponent(cubeId, new MeshComponent("box", 0x4a9eff));
     this.renderSystem.createObjectForEntity(cubeId);
 
-    // Plane (floor)
-    const planeId = this.world.createEntity();
-    this.world.addComponent(planeId, new TagComponent("Plane"));
-    const pt = new TransformComponent();
-    pt.rotation.set(-Math.PI / 2, 0, 0);
-    pt.scale.set(10, 10, 1);
-    this.world.addComponent(planeId, pt);
-    this.world.addComponent(planeId, new MeshComponent("plane", 0x888888));
-    this.renderSystem.createObjectForEntity(planeId);
+    // Floor box
+    const floorId = this.world.createEntity();
+    this.world.addComponent(floorId, new TagComponent("Floor"));
+    const ft = new TransformComponent();
+    ft.position.set(0, -0.5, 0);
+    ft.scale.set(50, 1, 50);
+    this.world.addComponent(floorId, ft);
+    this.world.addComponent(floorId, new MeshComponent("box", 0x888888));
+    this.renderSystem.createObjectForEntity(floorId);
   }
 
   #loadCurrentScene() {

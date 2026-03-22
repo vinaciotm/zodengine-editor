@@ -472,6 +472,8 @@ export class TopBar {
   renderer.setPixelRatio(devicePixelRatio);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.5;
   document.body.appendChild(renderer.domElement);
 
   if (sceneData?.worldData) loadScene(sceneData.worldData);
@@ -543,6 +545,25 @@ export class TopBar {
       } else if (c.FogComponent) {
         const fc = c.FogComponent;
         scene.fog = new THREE.Fog(fc.color, fc.near, fc.far);
+        continue;
+      } else if (c.SkyBoxComponent) {
+        const sc = c.SkyBoxComponent;
+        const sky = new SkyMesh();
+        sky.material.fog = false;
+        sky.scale.setScalar(450000);
+        sky.turbidity.value = sc.turbidity;
+        sky.rayleigh.value = sc.rayleigh;
+        sky.mieCoefficient.value = sc.mieCoefficient;
+        sky.mieDirectionalG.value = sc.mieDirectionalG;
+        sky.cloudCoverage.value = sc.cloudCoverage ?? 0.4;
+        sky.cloudDensity.value = sc.cloudDensity ?? 0.4;
+        sky.cloudElevation.value = sc.cloudElevation ?? 1;
+        const phi = THREE.MathUtils.degToRad(90 - sc.elevation);
+        const theta = THREE.MathUtils.degToRad(sc.azimuth);
+        sky.sunPosition.value.setFromSphericalCoords(1, phi, theta);
+        scene.add(sky);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = sc.exposure ?? 1;
         continue;
       } else if (c.CameraComponent) {
         const cc = c.CameraComponent;
@@ -642,10 +663,11 @@ export class TopBar {
   <div id="loading">Loading...</div>
   <div id="hud">${this.#esc(sceneName)}<br>Click: mouse look &nbsp;|&nbsp; WASD: move &nbsp;|&nbsp; Q/E: down/up &nbsp;|&nbsp; Esc: unlock</div>
   <script type="importmap">
-  {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.webgpu.js","three/webgpu":"https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.webgpu.js"}}
+  {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.webgpu.js","three/webgpu":"https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.webgpu.js","three/tsl":"https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.tsl.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/"}}
   </script>
   <script type="module">
   import * as THREE from 'three';
+  import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
   ${runtimeCode}
   </script>
 </body>

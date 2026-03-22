@@ -1009,6 +1009,13 @@ body {
 .xyz-label.z {
     color: #6b6bff;
 }
+.inspector-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+}
 .inspector-name-input {
     background: var(--bg-dark);
     border: 1px solid var(--border);
@@ -1019,8 +1026,8 @@ body {
     padding: 3px 7px;
     outline: none;
     font-family: var(--font);
-    margin: 5px 8px;
-    width: calc(100% - 16px);
+    flex: 1;
+    min-width: 0;
     transition: border-color 0.1s;
 }
 .inspector-name-input:focus {
@@ -1659,7 +1666,6 @@ body {
 [data-theme="pink"]    .panel-header {
     background: linear-gradient(180deg, #28282e 0%, #18181e 55%, #0e0e12 100%);
     border-bottom: 1px solid #2a2a32;
-    border-left: 3px solid var(--accent);
     color: var(--text-bright);
 }
 [data-theme="default"] .inspector-section-header,
@@ -1737,7 +1743,7 @@ body {
 [data-theme="red"]     .vt-btn,
 [data-theme="purple"]  .vt-btn,
 [data-theme="pink"]    .vt-btn {
-    background: rgba(14,14,16,0.80);
+    background: linear-gradient(180deg, #2c2c34 0%, #1a1a22 55%, #0e0e14 100%);
     border-color: rgba(255,255,255,0.10);
 }
 [data-theme="default"] .prefab-btn,
@@ -1900,7 +1906,12 @@ body {
 [data-theme="blue"]    .vt-btn.active,
 [data-theme="red"]     .vt-btn.active,
 [data-theme="purple"]  .vt-btn.active,
-[data-theme="pink"]    .vt-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+[data-theme="pink"]    .vt-btn.active {
+    background: linear-gradient(180deg, #2c2c34 0%, #1a1a22 55%, #0e0e14 100%);
+    border-color: var(--accent);
+    box-shadow: inset 0 -2px 0 var(--accent);
+    color: var(--text-bright);
+}
 
 /* ── Metallic sheen overlays (top-lit, panel headers only) ── */
 [data-theme="default"] .panel-header::after,
@@ -1974,7 +1985,6 @@ body {
 [data-theme="flat-pink"]   .panel-header {
     background: #191919;
     border-bottom: 1px solid #282828;
-    border-left: 3px solid var(--accent);
     color: var(--text-bright);
 }
 [data-theme="flat"]        .inspector-section-header,
@@ -2211,13 +2221,11 @@ body {
 [data-theme="light"]      .panel-header {
     background: linear-gradient(180deg, #e4e4ee 0%, #d4d4e0 55%, #c8c8d8 100%);
     border-bottom: 1px solid #c0c0d0;
-    border-left: 3px solid var(--accent);
     color: var(--text-bright);
 }
 [data-theme="flat-light"] .panel-header {
     background: #d8d8e4;
     border-bottom: 1px solid #c4c4d4;
-    border-left: 3px solid var(--accent);
     color: var(--text-bright);
 }
 [data-theme="light"]      .inspector-section-header,

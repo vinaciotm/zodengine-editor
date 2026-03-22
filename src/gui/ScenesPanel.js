@@ -1,6 +1,40 @@
 import { showNewSceneModal, makeCollapsiblePanel, showConfirm } from './utils.js';
 import { sfx } from './sfx.js';
 
+let _thumbPlaceholder = null;
+function getThumbPlaceholder() {
+  if (_thumbPlaceholder) return _thumbPlaceholder;
+  const w = 96, h = 60;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  // Background gradient
+  const bg = ctx.createLinearGradient(0, 0, 0, h);
+  bg.addColorStop(0, '#1a1f2e'); bg.addColorStop(1, '#0d0f18');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+  // Grid lines
+  ctx.strokeStyle = 'rgba(80,100,140,0.25)'; ctx.lineWidth = 0.5;
+  for (let x = 0; x <= w; x += 12) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+  for (let y = 0; y <= h; y += 12) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  // Simple 3D cube wireframe icon centered
+  const cx = w / 2, cy = h / 2 + 2;
+  const s = 10, ox = 5, oy = -5;
+  ctx.strokeStyle = 'rgba(100,160,230,0.7)'; ctx.lineWidth = 1.2; ctx.lineJoin = 'round';
+  // Front face
+  ctx.beginPath(); ctx.rect(cx - s, cy - s, s * 2, s * 2); ctx.stroke();
+  // Back face offset
+  ctx.beginPath(); ctx.rect(cx - s + ox, cy - s + oy, s * 2, s * 2); ctx.stroke();
+  // Connecting lines
+  for (const [dx, dy] of [[-s, -s], [s, -s], [s, s], [-s, s]]) {
+    ctx.beginPath(); ctx.moveTo(cx + dx, cy + dy); ctx.lineTo(cx + dx + ox, cy + dy + oy); ctx.stroke();
+  }
+  // Label
+  ctx.fillStyle = 'rgba(100,140,200,0.55)'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('no preview', cx, h - 5);
+  _thumbPlaceholder = canvas.toDataURL();
+  return _thumbPlaceholder;
+}
+
 export class ScenesPanel {
   #el = null;
   #editor = null;
@@ -64,9 +98,7 @@ export class ScenesPanel {
       const item = document.createElement('div');
       item.className = 'scene-item' + (idx === active ? ' active' : '');
 
-      const thumb = scene.thumbnail
-        ? `<img src="${scene.thumbnail}" class="scene-thumb" />`
-        : `<span class="scene-item-icon">&#127916;</span>`;
+      const thumb = `<img src="${scene.thumbnail ?? getThumbPlaceholder()}" class="scene-thumb" />`;
 
       item.innerHTML = `
         ${thumb}

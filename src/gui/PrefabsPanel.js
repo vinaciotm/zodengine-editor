@@ -1,4 +1,21 @@
 import { sfx } from './sfx.js';
+import { iconURL } from './entityIcons.js';
+
+const CANVAS_ICON_MAP = {
+  cube:         'mesh_box',
+  sphere:       'mesh_sphere',
+  cone:         'mesh_cone',
+  cylinder:     'mesh_cylinder',
+  capsule:      'mesh_capsule',
+  plane:        'mesh_plane',
+  pointlight:   'light_point',
+  dirlight:     'light_directional',
+  spotlight:    'light_spot',
+  ambientlight: 'light_ambient',
+  fog:          'fog',
+  sky:          'sky',
+  camera:       'camera',
+};
 
 export class PrefabsPanel {
   #el = null;
@@ -19,22 +36,22 @@ export class PrefabsPanel {
   #render() {
     const categories = {
       formas: [
-        { spawn: 'cube',     icon: '&#9635;',  label: 'Cube' },
-        { spawn: 'sphere',   icon: '&#9679;',  label: 'Sphere' },
-        { spawn: 'cone',     icon: '&#9651;',  label: 'Cone' },
-        { spawn: 'cylinder', icon: '&#9646;',  label: 'Cylinder' },
-        { spawn: 'capsule',  icon: '&#9700;',  label: 'Capsule' },
-        { spawn: 'plane',    icon: '&#9644;',  label: 'Plane' },
+        { spawn: 'cube',     label: 'Cube' },
+        { spawn: 'sphere',   label: 'Sphere' },
+        { spawn: 'cone',     label: 'Cone' },
+        { spawn: 'cylinder', label: 'Cylinder' },
+        { spawn: 'capsule',  label: 'Capsule' },
+        { spawn: 'plane',    label: 'Plane' },
       ],
       luz: [
-        { spawn: 'pointlight', icon: '&#128161;', label: 'Point' },
-        { spawn: 'dirlight',   icon: '&#9728;',   label: 'Directional' },
-        { spawn: 'spotlight',  icon: '&#128294;', label: 'Spot' },
+        { spawn: 'pointlight', label: 'Point' },
+        { spawn: 'dirlight',   label: 'Directional' },
+        { spawn: 'spotlight',  label: 'Spot' },
       ],
       ambiente: [
-        { spawn: 'ambientlight', icon: '&#127774;', label: 'Ambient' },
-        { spawn: 'fog',          icon: '&#127568;', label: 'Fog' },
-        { spawn: 'sky',          icon: '&#127771;', label: 'SkyBox' },
+        { spawn: 'ambientlight', label: 'Ambient' },
+        { spawn: 'fog',          label: 'Fog' },
+        { spawn: 'sky',          label: 'SkyBox' },
       ],
       jogo: [
         { spawn: 'camera',        icon: '&#127909;', label: 'Camera' },
@@ -118,7 +135,11 @@ export class PrefabsPanel {
         const btn = document.createElement('button');
         btn.className = 'asset-item';
         btn.dataset.spawn = item.spawn;
-        btn.innerHTML = `<span class="asset-icon">${item.icon}</span><span class="asset-label">${item.label}</span>`;
+        const canvasType = CANVAS_ICON_MAP[item.spawn];
+        const iconHtml = canvasType
+          ? `<img src="${iconURL(canvasType)}" width="22" height="22" style="display:block;margin:0 auto 2px;">`
+          : `<span class="asset-icon">${item.icon ?? ''}</span>`;
+        btn.innerHTML = `${iconHtml}<span class="asset-label">${item.label}</span>`;
         btn.addEventListener('click', () => {
           const id = spawnMap[item.spawn]?.();
           if (id !== undefined) { this.#editor.selectEntity(id); }

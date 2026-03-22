@@ -9,6 +9,8 @@ import { GroupComponent } from '../components/GroupComponent.js';
 import { ParentComponent } from '../components/ParentComponent.js';
 import { CameraComponent } from '../components/CameraComponent.js';
 import { FogComponent } from '../components/FogComponent.js';
+import { SkyBoxComponent } from '../components/SkyBoxComponent.js';
+import { getEntityIconType, iconURL } from './entityIcons.js';
 
 export class HierarchyPanel {
   #el = null;
@@ -232,12 +234,10 @@ export class HierarchyPanel {
   #getIcon(entityId) {
     const w = this.#editor.world;
     if (w.hasComponent(entityId, GroupComponent)) return '&#128193;';
-    if (w.hasComponent(entityId, LightComponent)) return '&#128161;';
-    if (w.hasComponent(entityId, CameraComponent)) return '&#127909;';
-    if (w.hasComponent(entityId, FogComponent)) return '&#127568;';
     if (w.hasComponent(entityId, TriggerComponent)) return '&#128993;';
     if (w.hasComponent(entityId, PlayerStartComponent)) return '&#128694;';
-    if (w.hasComponent(entityId, MeshComponent)) return '&#9632;';
+    const type = getEntityIconType(entityId, w);
+    if (type) return `<img src="${iconURL(type)}" width="14" height="14" style="vertical-align:middle;display:inline-block;">`;
     return '&#9711;';
   }
 }

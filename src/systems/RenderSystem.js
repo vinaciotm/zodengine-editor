@@ -8,7 +8,7 @@ import { GroupComponent } from '../components/GroupComponent.js';
 import { CameraComponent } from '../components/CameraComponent.js';
 import { FogComponent } from '../components/FogComponent.js';
 import { SkyBoxComponent } from '../components/SkyBoxComponent.js';
-import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
+import { SkyMesh } from '../vendor/SkyMeshPatched.js';
 
 export class RenderSystem {
   world = null;
@@ -223,6 +223,10 @@ export class RenderSystem {
     if (fog) {
       const marker = new THREE.Object3D();
       marker.userData.isFogEntity = true;
+      const fogSprite = this.#makeFogSprite();
+      fogSprite.userData.isEditorIcon = true;
+      fogSprite.userData.baseScale = 0.07;
+      marker.add(fogSprite);
       this.scene.fog = new THREE.Fog(fog.color, fog.near, fog.far);
       return marker;
     }
@@ -292,11 +296,15 @@ export class RenderSystem {
   #makeLight(comp) {
     const grp = new THREE.Group();
 
-    // Ambient light: scene-wide, no position/shadow/sprite
+    // Ambient light: scene-wide, no position/shadow — but add a sprite icon for editor
     if (comp.type === 'ambient') {
       const light = new THREE.AmbientLight(comp.color, comp.intensity);
       grp.add(light);
       grp.userData.lightRef = light;
+      const sprite = this.#makeLightSprite('ambient');
+      sprite.userData.isEditorIcon = true;
+      sprite.userData.baseScale = 0.07;
+      grp.add(sprite);
       return grp;
     }
 
@@ -574,7 +582,27 @@ export class RenderSystem {
     const cx = size / 2, cy = size / 2;
     ctx.clearRect(0, 0, size, size);
 
-    if (type === 'directional') {
+    if (type === 'ambient') {
+      // Ambient — soft radial glow with outer rings
+      const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, 56);
+      g.addColorStop(0, 'rgba(255,249,200,0.9)');
+      g.addColorStop(0.3, 'rgba(255,229,102,0.5)');
+      g.addColorStop(0.7, 'rgba(255,200,80,0.15)');
+      g.addColorStop(1, 'rgba(255,200,80,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx, cy, 56, 0, Math.PI * 2); ctx.fill();
+      // Core glow
+      const core = ctx.createRadialGradient(cx - 4, cy - 4, 2, cx, cy, 24);
+      core.addColorStop(0, '#fffde0'); core.addColorStop(0.5, '#ffe566'); core.addColorStop(1, 'rgba(255,200,80,0.2)');
+      ctx.fillStyle = core;
+      ctx.beginPath(); ctx.arc(cx, cy, 24, 0, Math.PI * 2); ctx.fill();
+      // Two soft outer rings
+      ctx.strokeStyle = 'rgba(255,220,80,0.35)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, 38, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,220,80,0.18)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx, cy, 50, 0, Math.PI * 2); ctx.stroke();
+
+    } else if (type === 'directional') {
       // Sun — centered at canvas center = entity position
       const rayLen = 22, rayWidth = 4, innerR = 22;
       const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 48);
@@ -705,6 +733,53 @@ export class RenderSystem {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.userData.isEditorOnly = true;
     return mesh;
+  }
+
+  #makeFogSprite() {
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const cx = size / 2, cy = size / 2;
+    ctx.clearRect(0, 0, size, size);
+
+    // Background circle glow
+    const glow = ctx.createRadialGradient(cx, cy, 5, cx, cy, 52);
+    glow.addColorStop(0, 'rgba(160,190,210,0.3)');
+    glow.addColorStop(1, 'rgba(160,190,210,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, 52, 0, Math.PI * 2); ctx.fill();
+
+    // Horizontal mist layers
+    const layers = [
+      { y: cy - 18, w: 64, h: 10 },
+      { y: cy - 6,  w: 80, h: 12 },
+      { y: cy + 8,  w: 70, h: 11 },
+      { y: cy + 22, w: 56, h: 9  },
+    ];
+    for (const l of layers) {
+      const g = ctx.createLinearGradient(cx - l.w / 2, 0, cx + l.w / 2, 0);
+      g.addColorStop(0,   'rgba(200,215,230,0)');
+      g.addColorStop(0.2, 'rgba(200,215,230,0.80)');
+      g.addColorStop(0.8, 'rgba(200,215,230,0.80)');
+      g.addColorStop(1,   'rgba(200,215,230,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(cx, l.y + l.h / 2, l.w / 2, l.h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Border circle
+    ctx.strokeStyle = 'rgba(140,175,200,0.5)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, 51, 0, Math.PI * 2); ctx.stroke();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({
+      map: texture, sizeAttenuation: false, depthTest: true, transparent: true, opacity: 1.0,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.07, 0.07, 1);
+    return sprite;
   }
 
   #makeSkySprite() {

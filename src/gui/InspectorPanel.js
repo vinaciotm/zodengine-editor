@@ -1,5 +1,6 @@
 import { numInput, dragNum, colorToHex, hexToNum, makeCollapsiblePanel } from './utils.js';
 import { sfx } from './sfx.js';
+import { getEntityIconType, iconURL } from './entityIcons.js';
 import { TagComponent } from '../components/TagComponent.js';
 import { TransformComponent } from '../components/TransformComponent.js';
 import { MeshComponent } from '../components/MeshComponent.js';
@@ -80,9 +81,19 @@ export class InspectorPanel {
       content.appendChild(badge);
     }
 
-    // Name
+    // Name row with icon
     const tag = world.getComponent(entityId, TagComponent);
     if (tag) {
+      const nameRow = document.createElement('div');
+      nameRow.className = 'inspector-name-row';
+      const iconType = getEntityIconType(entityId, world);
+      if (iconType) {
+        const iconEl = document.createElement('img');
+        iconEl.src = iconURL(iconType);
+        iconEl.width = 18; iconEl.height = 18;
+        iconEl.style.cssText = 'flex-shrink:0;opacity:0.9;';
+        nameRow.appendChild(iconEl);
+      }
       const nameInput = document.createElement('input');
       nameInput.className = 'inspector-name-input';
       nameInput.value = tag.name;
@@ -90,7 +101,8 @@ export class InspectorPanel {
       nameInput.addEventListener('change', () => {
         this.#editor.renameEntity(entityId, nameInput.value.trim() || 'Entity');
       });
-      content.appendChild(nameInput);
+      nameRow.appendChild(nameInput);
+      content.appendChild(nameRow);
     }
 
     // Transform
