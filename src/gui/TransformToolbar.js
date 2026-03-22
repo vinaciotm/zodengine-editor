@@ -77,10 +77,8 @@ export class TransformToolbar {
         <polyline points="11.5,1 14,4 11,5.5"/>
       </svg>`,
       scale: `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="1,5 1,1 5,1"/><line x1="1" y1="1" x2="6.5" y2="6.5"/>
-        <polyline points="15,5 15,1 11,1"/><line x1="15" y1="1" x2="9.5" y2="6.5"/>
-        <polyline points="1,11 1,15 5,15"/><line x1="1" y1="15" x2="6.5" y2="9.5"/>
-        <polyline points="15,11 15,15 11,15"/><line x1="15" y1="15" x2="9.5" y2="9.5"/>
+        <polyline points="1,11 1,15 5,15"/><line x1="1" y1="15" x2="15" y2="1"/>
+        <polyline points="11,1 15,1 15,5"/>
       </svg>`,
       lit: `<svg viewBox="0 0 14 18" width="14" height="18" fill="currentColor">
         <path d="M3 7a4 4 0 0 1 8 0c0 2.2-1.5 3.8-2 5.5H5C4.5 10.8 3 9.2 3 7z"/>

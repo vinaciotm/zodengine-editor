@@ -604,26 +604,27 @@ body {
 }
 .vt-left {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     pointer-events: none;
 }
 .vt-group {
     display: flex;
-    gap: 4px;
+    gap: 3px;
     pointer-events: all;
 }
 .vt-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 5px;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
     background: rgba(16, 16, 16, 0.68);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.65);
+    color: rgba(255, 255, 255, 0.55);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(6px);
+    font-size: 13px;
     transition:
         background 0.1s,
         color 0.1s,
@@ -635,9 +636,9 @@ body {
     border-color: rgba(255, 255, 255, 0.25);
 }
 .vt-btn.active {
-    background: rgba(0, 120, 212, 0.82);
-    border-color: rgba(0, 120, 212, 0.9);
-    color: white;
+    background: rgba(30, 30, 40, 0.95);
+    border-color: var(--accent, #0078d4);
+    color: var(--accent, #0078d4);
 }
 .vt-snap-group {
     align-items: center;
@@ -648,9 +649,9 @@ body {
     gap: 5px;
     background: rgba(16, 16, 16, 0.68);
     border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 5px;
-    padding: 0 8px;
-    height: 34px;
+    border-radius: 4px;
+    padding: 0 7px;
+    height: 28px;
     backdrop-filter: blur(6px);
 }
 .vt-snap-slider {
@@ -1745,6 +1746,7 @@ body {
 [data-theme="pink"]    .vt-btn {
     background: linear-gradient(180deg, #2c2c34 0%, #1a1a22 55%, #0e0e14 100%);
     border-color: rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.50);
 }
 [data-theme="default"] .prefab-btn,
 [data-theme="orange"]  .prefab-btn,
@@ -1900,17 +1902,22 @@ body {
 [data-theme="red"]     .vt-btn:hover,
 [data-theme="purple"]  .vt-btn:hover,
 [data-theme="pink"]    .vt-btn:hover { background: rgba(28,28,32,0.90); border-color: var(--accent); }
-[data-theme="default"] .vt-btn.active,
+[data-theme="default"] .vt-btn.active {
+    background: linear-gradient(180deg, #141418 0%, #08080e 100%);
+    border-color: rgba(255,255,255,0.55);
+    box-shadow: none;
+    color: rgba(255,255,255,0.95);
+}
 [data-theme="orange"]  .vt-btn.active,
 [data-theme="green"]   .vt-btn.active,
 [data-theme="blue"]    .vt-btn.active,
 [data-theme="red"]     .vt-btn.active,
 [data-theme="purple"]  .vt-btn.active,
 [data-theme="pink"]    .vt-btn.active {
-    background: linear-gradient(180deg, #2c2c34 0%, #1a1a22 55%, #0e0e14 100%);
+    background: #252530;
     border-color: var(--accent);
-    box-shadow: inset 0 -2px 0 var(--accent);
-    color: var(--text-bright);
+    box-shadow: none;
+    color: var(--accent);
 }
 
 /* ── Metallic sheen overlays (top-lit, panel headers only) ── */
@@ -2082,7 +2089,7 @@ body {
 [data-theme="flat-blue"]   .vt-btn.active,
 [data-theme="flat-red"]    .vt-btn.active,
 [data-theme="flat-purple"] .vt-btn.active,
-[data-theme="flat-pink"]   .vt-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+[data-theme="flat-pink"]   .vt-btn.active { background: #20202a; border-color: var(--accent); color: var(--accent); }
 [data-theme="flat"]        .prefab-btn,
 [data-theme="flat-orange"] .prefab-btn,
 [data-theme="flat-green"]  .prefab-btn,
@@ -2272,7 +2279,7 @@ body {
 [data-theme="light"]      .vt-btn:hover,
 [data-theme="flat-light"] .vt-btn:hover { background: rgba(210,215,240,0.95); border-color: var(--accent); }
 [data-theme="light"]      .vt-btn.active,
-[data-theme="flat-light"] .vt-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+[data-theme="flat-light"] .vt-btn.active { background: #d0d0e2; border-color: var(--accent); color: var(--accent); }
 [data-theme="light"]      .prefab-btn,
 [data-theme="flat-light"] .prefab-btn,
 [data-theme="light"]      .asset-item,

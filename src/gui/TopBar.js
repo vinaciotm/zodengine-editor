@@ -624,11 +624,12 @@ export class TopBar {
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  const clock = new THREE.Clock();
+  const clock = new THREE.Timer();
   document.getElementById('loading').style.display = 'none';
 
   (function animate() {
     requestAnimationFrame(animate);
+    clock.update();
     const delta = clock.getDelta();
     const speed = 5 * delta;
     const fwd = new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw)*Math.cos(pitch));

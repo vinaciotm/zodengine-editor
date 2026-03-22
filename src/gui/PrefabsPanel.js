@@ -15,6 +15,9 @@ const CANVAS_ICON_MAP = {
   fog:          'fog',
   sky:          'sky',
   camera:       'camera',
+  spheretrigger:'trigger_sphere',
+  boxtrigger:   'trigger_box',
+  playerstart:  'start_flag',
 };
 
 export class PrefabsPanel {
@@ -54,10 +57,10 @@ export class PrefabsPanel {
         { spawn: 'sky',          label: 'SkyBox' },
       ],
       jogo: [
-        { spawn: 'camera',        icon: '&#127909;', label: 'Camera' },
-        { spawn: 'spheretrigger', icon: '&#128993;', label: 'SphereTrig' },
-        { spawn: 'boxtrigger',    icon: '&#128243;', label: 'BoxTrig' },
-        { spawn: 'playerstart',   icon: '&#128694;', label: 'Start' },
+        { spawn: 'camera',        label: 'Camera' },
+        { spawn: 'spheretrigger', label: 'SphereTrig' },
+        { spawn: 'boxtrigger',    label: 'BoxTrig' },
+        { spawn: 'playerstart',   label: 'Start' },
       ],
     };
 

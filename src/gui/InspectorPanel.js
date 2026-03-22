@@ -2,6 +2,7 @@ import { numInput, dragNum, colorToHex, hexToNum, makeCollapsiblePanel } from '.
 import { sfx } from './sfx.js';
 import { getEntityIconType, iconURL } from './entityIcons.js';
 import { TagComponent } from '../components/TagComponent.js';
+import { TransformCommand } from '../editor/CommandManager.js';
 import { TransformComponent } from '../components/TransformComponent.js';
 import { MeshComponent } from '../components/MeshComponent.js';
 import { LightComponent } from '../components/LightComponent.js';
@@ -184,7 +185,7 @@ export class InspectorPanel {
     const body = sec.querySelector('.inspector-section-body');
     body.style.padding = '4px 0 8px';
 
-    const makeVec3Block = (label, getVal, setVal, step = 0.01) => {
+    const makeVec3Block = (label, getVal, setVal, step = 0.01, onDragStart, onCommit) => {
       const group = document.createElement('div');
       group.className = 'vec3-group';
 
@@ -204,7 +205,8 @@ export class InspectorPanel {
         axlbl.className = `xyz-label ${axis}`;
         axlbl.textContent = axis.toUpperCase();
 
-        const dn = dragNum(getVal(axis), (val) => { setVal(axis, val); }, step);
+        const dn = dragNum(getVal(axis), (val) => { setVal(axis, val); }, step,
+          { onDragStart, onCommit });
         dn.querySelector('input').dataset.vecAxis = `${label}-${axis}`;
 
         wrap.appendChild(axlbl);
@@ -218,16 +220,33 @@ export class InspectorPanel {
 
     const sync = () => this.#editor.emit('entity:changed', entityId);
 
+    // Undo/redo support: capture snapshot before drag, push command on commit
+    const snapTransform = () => ({
+      position: transform.position.clone(),
+      rotation: transform.rotation.clone(),
+      scale: transform.scale.clone(),
+    });
+    let _before = null;
+    const onDragStart = () => { if (!_before) _before = snapTransform(); };
+    const onCommit = () => {
+      if (_before) {
+        const after = snapTransform();
+        this.#editor.commandManager.push(new TransformCommand(this.#editor, entityId, _before, after));
+        _before = null;
+      }
+    };
+
     body.appendChild(makeVec3Block('Position',
       axis => transform.position[axis],
-      (axis, val) => { transform.position[axis] = val; sync(); }
+      (axis, val) => { transform.position[axis] = val; sync(); },
+      0.01, onDragStart, onCommit
     ));
     const isRotationLocked = this.#editor.isRotationLocked(entityId);
     if (!isRotationLocked) {
       body.appendChild(makeVec3Block('Rotation',
         axis => transform.rotation[axis] * 180 / Math.PI,
         (axis, val) => { transform.rotation[axis] = val * Math.PI / 180; sync(); },
-        1
+        1, onDragStart, onCommit
       ));
     }
     // Scale is hidden for cameras and lights (not applicable)
@@ -235,7 +254,8 @@ export class InspectorPanel {
     if (!isScaleLocked) {
       body.appendChild(makeVec3Block('Scale',
         axis => transform.scale[axis],
-        (axis, val) => { transform.scale[axis] = val; sync(); }
+        (axis, val) => { transform.scale[axis] = val; sync(); },
+        0.01, onDragStart, onCommit
       ));
     }
 

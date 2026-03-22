@@ -234,8 +234,6 @@ export class HierarchyPanel {
   #getIcon(entityId) {
     const w = this.#editor.world;
     if (w.hasComponent(entityId, GroupComponent)) return '&#128193;';
-    if (w.hasComponent(entityId, TriggerComponent)) return '&#128993;';
-    if (w.hasComponent(entityId, PlayerStartComponent)) return '&#128694;';
     const type = getEntityIconType(entityId, w);
     if (type) return `<img src="${iconURL(type)}" width="14" height="14" style="vertical-align:middle;display:inline-block;">`;
     return '&#9711;';

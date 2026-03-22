@@ -149,6 +149,9 @@ export class RenderSystem {
         } else {
           this.scene.fog = null;
         }
+        // Apply transform so the marker icon moves with the entity
+        const ft = this.world?.getComponent(entityId, TransformComponent);
+        if (ft) { obj.position.copy(ft.position); obj.rotation.copy(ft.rotation); }
         continue;
       }
 
@@ -157,6 +160,9 @@ export class RenderSystem {
         const skyMeshRef = obj.userData.skyMeshRef;
         if (!obj.visible) {
           if (skyMeshRef && skyMeshRef.parent) skyMeshRef.parent.remove(skyMeshRef);
+          // Still apply transform to move the invisible marker
+          const st = this.world?.getComponent(entityId, TransformComponent);
+          if (st) { obj.position.copy(st.position); }
           continue;
         } else if (skyMeshRef && !skyMeshRef.parent) {
           this.scene.add(skyMeshRef);
@@ -176,6 +182,9 @@ export class RenderSystem {
           m.sunPosition.value.setFromSphericalCoords(1, phi, theta);
           if (this.renderer) this.renderer.toneMappingExposure = sky.exposure;
         }
+        // Apply transform so the marker icon moves with the entity
+        const st = this.world?.getComponent(entityId, TransformComponent);
+        if (st) { obj.position.copy(st.position); obj.rotation.copy(st.rotation); }
         continue;
       }
 
@@ -496,79 +505,58 @@ export class RenderSystem {
     return grp;
   }
 
-  // Video/film camera sprite
+  // Retro video camera sprite — matches entityIcons camera style
   #makeCameraSprite() {
     const size = 128;
     const canvas = document.createElement('canvas');
     canvas.width = size; canvas.height = size;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, size, size);
-    const cx = size / 2, cy = size / 2;
 
-    const glow = ctx.createRadialGradient(cx, cy, 8, cx, cy, 52);
-    glow.addColorStop(0, 'rgba(80,200,255,0.25)');
-    glow.addColorStop(1, 'rgba(80,200,255,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(cx, cy, 52, 0, Math.PI * 2); ctx.fill();
-
-    // Camera body (wide horizontal — video camera)
-    const bx = 18, by = 40, bw = 70, bh = 42;
-    const bodyGrad = ctx.createLinearGradient(bx, by, bx, by + bh);
-    bodyGrad.addColorStop(0, '#5a9adc');
-    bodyGrad.addColorStop(1, '#1a4a88');
-    ctx.fillStyle = bodyGrad;
-    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 5); ctx.fill();
-    ctx.strokeStyle = '#88ccff'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 5); ctx.stroke();
-
-    // Lens housing
-    ctx.fillStyle = '#1a3a66';
-    ctx.beginPath(); ctx.roundRect(78, 50, 22, 22, 4); ctx.fill();
-
-    // Lens barrel
-    const lcx = 91, lcy = 61;
-    ctx.strokeStyle = '#44aadd'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(lcx, lcy, 11, 0, Math.PI * 2); ctx.stroke();
-    const lensGrad = ctx.createRadialGradient(lcx - 3, lcy - 3, 1, lcx, lcy, 9);
-    lensGrad.addColorStop(0, '#bbddff');
-    lensGrad.addColorStop(0.4, '#2277bb');
-    lensGrad.addColorStop(1, '#081828');
-    ctx.fillStyle = lensGrad;
-    ctx.beginPath(); ctx.arc(lcx, lcy, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.beginPath(); ctx.ellipse(lcx - 3, lcy - 3, 3, 4, -0.4, 0, Math.PI * 2); ctx.fill();
-
-    // Viewfinder eyepiece (left)
-    ctx.fillStyle = '#2a5a99';
-    ctx.beginPath(); ctx.roundRect(8, 46, 20, 11, 2); ctx.fill();
-    ctx.strokeStyle = '#88ccff'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(8, 46, 20, 11, 2); ctx.stroke();
-
-    // Top handle
-    ctx.fillStyle = '#2a5a99';
-    ctx.beginPath(); ctx.roundRect(34, 28, 38, 14, 4); ctx.fill();
-    ctx.strokeStyle = '#88ccff'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(34, 28, 38, 14, 4); ctx.stroke();
-    ctx.strokeStyle = 'rgba(136,204,255,0.4)'; ctx.lineWidth = 1;
-    for (let i = 0; i < 3; i++) {
-      const hx = 40 + i * 9;
-      ctx.beginPath(); ctx.moveTo(hx, 30); ctx.lineTo(hx, 40); ctx.stroke();
+    // Draw in 32-unit space, scaled 4× to fill 128px canvas
+    ctx.scale(4, 4);
+    const cx = 16, cy = 16;
+    const s = 3.8, ox = cx - 1, oy = cy + 3;
+    const iso = (x, y, z) => [ox + (x - z) * s * 0.866, oy + (x + z) * s * 0.5 - y * s];
+    const poly = (pts, fill, stroke, lw = 0.8) => {
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+    };
+    const B = { w: 1.6, h: 0.6, d: 1.0 };
+    const TFL=iso(-B.w,B.h,B.d), TFR=iso(B.w,B.h,B.d), TBR=iso(B.w,B.h,-B.d), TBL=iso(-B.w,B.h,-B.d);
+    const BFL=iso(-B.w,-B.h,B.d), BFR=iso(B.w,-B.h,B.d), BBR=iso(B.w,-B.h,-B.d);
+    poly([TFL,TFR,TBR,TBL], '#8080c0', '#a0a0d4');
+    poly([TFR,BFR,BBR,TBR], '#484890', '#6868b0');
+    poly([TFL,TFR,BFR,BFL], '#6060a8', '#8080c0');
+    // Dual lenses
+    const l1 = iso(-0.8, 0.05, B.d);
+    const l2 = iso( 0.55, 0.05, B.d);
+    for (const lc of [l1, l2]) {
+      ctx.strokeStyle = '#282848'; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.arc(lc[0], lc[1], 4.2, 0, Math.PI * 2); ctx.stroke();
+      const lg = ctx.createRadialGradient(lc[0] - 1.2, lc[1] - 1.2, 0.4, lc[0], lc[1], 4.0);
+      lg.addColorStop(0, '#bcc0e8'); lg.addColorStop(0.4, '#7880b8'); lg.addColorStop(1, '#282850');
+      ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(lc[0], lc[1], 4.0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath(); ctx.ellipse(lc[0] - 1.3, lc[1] - 1.3, 1.4, 0.9, -0.5, 0, Math.PI * 2); ctx.fill();
     }
-
-    // Record indicator (red dot)
-    ctx.fillStyle = '#ff3333';
-    ctx.beginPath(); ctx.arc(cx - 2, 36, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,200,200,0.6)';
-    ctx.beginPath(); ctx.arc(cx - 3, 35, 2, 0, Math.PI * 2); ctx.fill();
-
-    // Tally light
-    ctx.fillStyle = '#ff4444';
-    ctx.beginPath(); ctx.arc(26, 48, 3, 0, Math.PI * 2); ctx.fill();
+    // Yellow viewfinder screen
+    const YTL=iso(B.w,0.45,-0.2), YTR=iso(B.w,0.45,-0.9);
+    const YBL=iso(B.w,-0.15,-0.2), YBR=iso(B.w,-0.15,-0.9);
+    poly([YTL,YTR,YBR,YBL], '#f0c030', '#c09010', 0.7);
+    const scg = ctx.createLinearGradient(YTL[0], YTL[1], YBR[0], YBR[1]);
+    scg.addColorStop(0, 'rgba(255,255,200,0.5)'); scg.addColorStop(1, 'rgba(180,130,0,0)');
+    ctx.fillStyle = scg;
+    ctx.beginPath(); ctx.moveTo(YTL[0],YTL[1]); ctx.lineTo(YTR[0],YTR[1]); ctx.lineTo(YBR[0],YBR[1]); ctx.lineTo(YBL[0],YBL[1]); ctx.closePath(); ctx.fill();
+    // REC dot
+    const rd = iso(-B.w + 0.45, B.h + 0.08, 0.2);
+    ctx.fillStyle = '#ff2828'; ctx.beginPath(); ctx.arc(rd[0], rd[1], 1.6, 0, Math.PI * 2); ctx.fill();
 
     const texture = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({
-      map: texture, sizeAttenuation: false, depthTest: true, transparent: true, opacity: 1.0,
-    });
+    const mat = new THREE.SpriteMaterial({ map: texture, sizeAttenuation: false, depthTest: true, transparent: true });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(0.08, 0.08, 1);
     return sprite;
@@ -839,16 +827,56 @@ export class RenderSystem {
   #makePlayerStart() {
     const group = new THREE.Group();
     group.userData.isEditorOnly = true;
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.3, 0.8, 4, 8),
-      new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true })
-    );
-    const arrow = new THREE.Mesh(
-      new THREE.ConeGeometry(0.15, 0.4, 8),
-      new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-    );
-    arrow.position.y = 1.0;
-    group.add(body, arrow);
+
+    // Low-poly capsule wireframe (capSegments=2, radialSegments=6)
+    const capsuleMat = new THREE.MeshBasicMaterial({ color: 0xffaa33, wireframe: true, opacity: 0.7, transparent: true });
+    const capsule = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.6, 2, 6), capsuleMat);
+    capsule.userData.isEditorOnly = true;
+    group.add(capsule);
+
+    // Icon sprite centered on the capsule
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    const s = 4;
+    const poleX = 8 * s, poleTop = 3 * s, poleBot = 29 * s;
+    ctx.strokeStyle = '#7a8e9e'; ctx.lineWidth = 2.5 * s; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(poleX, poleTop + 2 * s); ctx.lineTo(poleX, poleBot); ctx.stroke();
+    ctx.strokeStyle = '#aabccc'; ctx.lineWidth = 1.2 * s;
+    ctx.beginPath(); ctx.moveTo(poleX - 0.5 * s, poleTop + 2 * s); ctx.lineTo(poleX - 0.5 * s, poleBot - 4 * s); ctx.stroke();
+    ctx.strokeStyle = '#8899aa'; ctx.lineWidth = 2 * s; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(poleX - 5 * s, poleBot); ctx.lineTo(poleX + 5 * s, poleBot); ctx.stroke();
+    const kg = ctx.createRadialGradient(poleX - 0.5 * s, poleTop - 0.5 * s, 0.2 * s, poleX, poleTop, 2.5 * s);
+    kg.addColorStop(0, '#ddeeff'); kg.addColorStop(1, '#7a8e9e');
+    ctx.fillStyle = kg;
+    ctx.beginPath(); ctx.arc(poleX, poleTop, 2.5 * s, 0, Math.PI * 2); ctx.fill();
+    const fxS = poleX, fyS = (3 + 1) * s;
+    const cw = 5 * s, ch = 4 * s, cols = 4, rows = 3;
+    const fw = cols * cw, fh = rows * ch;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(fxS + 1.5 * s, fyS + 1.5 * s, fw, fh);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        ctx.fillStyle = (r + c) % 2 === 0 ? '#111111' : '#eeeeee';
+        ctx.fillRect(fxS + c * cw, fyS + r * ch, cw, ch);
+      }
+    }
+    const og = ctx.createLinearGradient(fxS, fyS, fxS, fyS + fh);
+    og.addColorStop(0, 'rgba(255,255,255,0.18)'); og.addColorStop(1, 'rgba(0,0,0,0.18)');
+    ctx.fillStyle = og; ctx.fillRect(fxS, fyS, fw, fh);
+    ctx.strokeStyle = 'rgba(180,210,240,0.8)'; ctx.lineWidth = 0.8 * s;
+    ctx.strokeRect(fxS, fyS, fw, fh);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMat = new THREE.SpriteMaterial({ map: texture, sizeAttenuation: false, depthTest: true, transparent: true });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.userData.isEditorIcon = true;
+    sprite.userData.baseScale = 0.07;
+    sprite.scale.set(0.07, 0.07, 1);
+    group.add(sprite);
+
     return group;
   }
 }

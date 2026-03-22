@@ -71,17 +71,21 @@ export function showToast(msg, type = '') {
   setTimeout(() => t.remove(), 2500);
 }
 
-export function numInput(value, onChange, step = 0.01) {
+export function numInput(value, onChange, step = 0.01, { onCommit } = {}) {
   const inp = document.createElement('input');
   inp.type = 'number';
   inp.className = 'inspector-input';
   inp.value = Number(value).toFixed(3);
   inp.step = step;
-  inp.addEventListener('change', () => onChange(parseFloat(inp.value) || 0));
+  inp.addEventListener('change', () => {
+    const v = parseFloat(inp.value) || 0;
+    onChange(v);
+    onCommit?.();
+  });
   return inp;
 }
 
-export function dragNum(value, onChange, step = 0.01) {
+export function dragNum(value, onChange, step = 0.01, { onDragStart, onDragEnd, onCommit } = {}) {
   const decimals = step < 0.1 ? 3 : step < 1 ? 2 : 1;
   const wrap = document.createElement('div');
   wrap.className = 'drag-num-wrap';
@@ -91,7 +95,13 @@ export function dragNum(value, onChange, step = 0.01) {
   inp.className = 'inspector-input';
   inp.value = Number(value).toFixed(decimals);
   inp.step = step;
-  inp.addEventListener('change', () => onChange(parseFloat(inp.value) || 0));
+  inp.addEventListener('change', () => {
+    const v = parseFloat(inp.value) || 0;
+    onDragStart?.();
+    onChange(v);
+    onCommit?.();
+    onDragEnd?.();
+  });
 
   const handle = document.createElement('span');
   handle.className = 'drag-num-handle';
@@ -104,6 +114,7 @@ export function dragNum(value, onChange, step = 0.01) {
     startY = e.clientY;
     startVal = parseFloat(inp.value) || 0;
     document.body.style.cursor = 'ns-resize';
+    onDragStart?.();
 
     const onMove = (ev) => {
       const dy = startY - ev.clientY;
@@ -115,6 +126,8 @@ export function dragNum(value, onChange, step = 0.01) {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       document.body.style.cursor = '';
+      onDragEnd?.();
+      onCommit?.();
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);

@@ -159,7 +159,7 @@ export class Runtime {
     });
     this.#resizeObserver.observe(viewport);
 
-    this.#clock = new THREE.Clock();
+    this.#clock = new THREE.Timer();
     this.#animate();
   }
 
@@ -183,6 +183,7 @@ export class Runtime {
 
   #animate = () => {
     this.#animFrameId = requestAnimationFrame(this.#animate);
+    this.#clock.update();
     const delta = this.#clock.getDelta();
 
     // FPS movement

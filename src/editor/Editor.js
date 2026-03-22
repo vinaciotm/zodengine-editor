@@ -79,7 +79,7 @@ export class Editor {
     );
     return `url("data:image/svg+xml,${svg}") 12 12, alias`;
   })();
-  #clock = new THREE.Clock();
+  #clock = new THREE.Timer();
   #resizeObserver = null;
   #cameraPreviewOverlay = null;
 
@@ -237,6 +237,7 @@ export class Editor {
 
   #animate = () => {
     this.#animFrameId = requestAnimationFrame(this.#animate);
+    this.#clock.update();
     const delta = this.#clock.getDelta();
     this.world.update(delta);
     this.orbitControls.update();
@@ -553,15 +554,6 @@ export class Editor {
       this.transformControls.rotationSnap = null;
       this.transformControls.scaleSnap = null;
     }
-    // Rebuild grid to match step size
-    if (this.#grid) {
-      this.threeScene.remove(this.#grid);
-      this.#grid.dispose?.();
-      const size = 200;
-      const divisions = Math.min(800, Math.round(size / step));
-      this.#grid = new THREE.GridHelper(size, divisions, 0x444444, 0x2a2a2a);
-      this.threeScene.add(this.#grid);
-    }
     this.emit("snap:changed", { enabled, step });
   }
 
@@ -808,22 +800,22 @@ export class Editor {
   spawnPointLight() {
     return this.spawnEntity("PointLight", (id) => {
       const t = this.world.getComponent(id, TransformComponent);
-      if (t) t.position.set(0, 3, 5);
+      if (t) t.position.set(2, 2, 0);
       this.world.addComponent(id, new LightComponent("point", 0xffffff, 1, 2));
     });
   }
   spawnDirectionalLight() {
     return this.spawnEntity("DirectionalLight", (id) => {
       const t = this.world.getComponent(id, TransformComponent);
-      if (t) { t.position.set(0, 3, 5); t.rotation.z = -Math.PI / 4; }
+      if (t) { t.position.set(3, 4, 3); t.rotation.z = -Math.PI / 4; }
       this.world.addComponent(id, new LightComponent("directional", 0xffffff, 1));
     });
   }
   spawnSpotLight() {
     return this.spawnEntity("SpotLight", (id) => {
       const t = this.world.getComponent(id, TransformComponent);
-      if (t) t.position.set(0, 3, 5);
-      this.world.addComponent(id, new LightComponent("spot", 0xffffff, 1, 1));
+      if (t) t.position.set(2, 2, 2);
+      this.world.addComponent(id, new LightComponent("spot", 0xffffff, 1, 2));
     });
   }
   spawnSphereTrigger() {
@@ -851,19 +843,23 @@ export class Editor {
   spawnAmbientLight() {
     return this.spawnEntity("AmbientLight", (id) => {
       const t = this.world.getComponent(id, TransformComponent);
-      if (t) t.position.set(0, 3, 5);
+      if (t) t.position.set(3, 3, 3);
       this.world.addComponent(id, new LightComponent("ambient", 0xffffff, 0.5));
     });
   }
   spawnFog() {
-    return this.spawnEntity("Fog", (id) =>
-      this.world.addComponent(id, new FogComponent(0xaaaaaa, 10, 100)),
-    );
+    return this.spawnEntity("Fog", (id) => {
+      const t = this.world.getComponent(id, TransformComponent);
+      if (t) t.position.set(-3, 2, 0);
+      this.world.addComponent(id, new FogComponent(0xaaaaaa, 10, 100));
+    });
   }
   spawnSky() {
-    return this.spawnEntity("SkyBox", (id) =>
-      this.world.addComponent(id, new SkyBoxComponent()),
-    );
+    return this.spawnEntity("SkyBox", (id) => {
+      const t = this.world.getComponent(id, TransformComponent);
+      if (t) t.position.set(-3, 3, 0);
+      this.world.addComponent(id, new SkyBoxComponent());
+    });
   }
 
   // Returns true for entity types where scale doesn't apply (camera, lights, sky)
