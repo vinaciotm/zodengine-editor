@@ -343,6 +343,22 @@ export class InspectorPanel {
     colorRow.appendChild(colorInput);
     body.appendChild(colorRow);
 
+    // Texture select
+    const texRow = document.createElement('div');
+    texRow.className = 'inspector-row';
+    texRow.innerHTML = '<span class="inspector-label">Texture</span>';
+    const texSel = document.createElement('select');
+    texSel.className = 'inspector-select';
+    ['checker','none'].forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t === 'checker' ? 'Checker' : 'None';
+      if ((mesh.texture ?? 'checker') === t) opt.selected = true;
+      texSel.appendChild(opt);
+    });
+    texSel.addEventListener('change', () => { mesh.texture = texSel.value; this.#editor.rebuildEntityObject(entityId); });
+    texRow.appendChild(texSel);
+    body.appendChild(texRow);
+
     // Material type
     const matRow = document.createElement('div');
     matRow.className = 'inspector-row';

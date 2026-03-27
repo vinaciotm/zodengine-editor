@@ -69,7 +69,6 @@ export class Editor {
   #rightMouseDown = false;
   #keysHeld = new Set();
   #flySpeed = 8;
-  #flyPointerId = null;
   #yaw = 0;
   #pitch = 0;
 
@@ -209,11 +208,11 @@ export class Editor {
     this.renderer.domElement.addEventListener("pointermove",  this.#onPointerMove);
     this.renderer.domElement.addEventListener("pointerup",    this.#onPointerUp);
     this.renderer.domElement.addEventListener("pointermove",  this.#onGizmoCursor);
-    // Capture phase fires BEFORE OrbitControls; setPointerCapture routes all
-    // subsequent pointer events to the canvas even if mouse leaves the viewport.
+    // Capture phase fires BEFORE OrbitControls to disable it for right-click.
+    // Pointer lock sends mousemove/mouseup to document.
     this.renderer.domElement.addEventListener("pointerdown", this.#onRightMouseDown, true);
-    this.renderer.domElement.addEventListener("pointermove", this.#onFlyMouseMove);
-    this.renderer.domElement.addEventListener("pointerup",   this.#onRightMouseUp);
+    document.addEventListener("mousemove", this.#onFlyMouseMove);
+    document.addEventListener("mouseup",   this.#onRightMouseUp);
     this.renderer.domElement.addEventListener("contextmenu",  (e) => e.preventDefault());
     window.addEventListener("keydown", this.#onFlyKeyDown);
     window.addEventListener("keyup",   this.#onFlyKeyUp);
@@ -260,7 +259,10 @@ export class Editor {
     const delta = this.#clock.getDelta();
     this.#applyFlyMovement(delta);
     this.world.update(delta);
-    if (!this.#rightMouseDown) this.orbitControls.update();
+    if (!this.#rightMouseDown) {
+      this.orbitControls.panSpeed = (this.#keysHeld.has('ShiftLeft') || this.#keysHeld.has('ShiftRight')) ? 4 : 1;
+      this.orbitControls.update();
+    }
     this.#syncHelpers();
     this.renderer.render(this.threeScene, this.camera);
     this.#updateCameraPreview();
@@ -360,12 +362,10 @@ export class Editor {
     obj.traverse((child) => {
       if (!child.isMesh || child.userData.isEditorIcon) return;
       if (!child.userData._origMat) child.userData._origMat = child.material;
-      const color = child.userData._origMat.color;
+      const orig = child.userData._origMat;
+      const color = Array.isArray(orig) ? (orig[0]?.color ?? 0xffffff) : (orig.color ?? 0xffffff);
       if (mode === "wireframe") {
-        child.material = new THREE.MeshBasicMaterial({
-          color,
-          wireframe: true,
-        });
+        child.material = new THREE.MeshBasicMaterial({ color, wireframe: true });
       } else {
         child.material = new THREE.MeshBasicMaterial({ color });
       }
@@ -487,38 +487,33 @@ export class Editor {
 
   #onRightMouseDown = (e) => {
     if (e.button !== 2) return;
-    e.stopPropagation();                                     // block OrbitControls
-    this.renderer.domElement.setPointerCapture(e.pointerId); // capture all events
+    e.stopPropagation();
     this.orbitControls.enabled = false;
     this.#rightMouseDown = true;
-    this.#flyPointerId = e.pointerId;
-    // Seed yaw/pitch from quaternion (order-independent, same as Runtime)
+    // Seed yaw/pitch from quaternion (same as Runtime)
     const euler = new THREE.Euler();
     euler.setFromQuaternion(this.camera.quaternion, 'YXZ');
     this.#pitch = euler.x;
     this.#yaw   = euler.y;
-    this.renderer.domElement.style.cursor = 'crosshair';
+    // Pointer lock: hides cursor, unlimited rotation, movementX/Y
+    this.renderer.domElement.requestPointerLock();
   };
 
   #onRightMouseUp = (e) => {
     if (e.button !== 2) return;
     this.#rightMouseDown = false;
     this.#keysHeld.clear();
-    if (this.#flyPointerId !== null) {
-      try { this.renderer.domElement.releasePointerCapture(this.#flyPointerId); } catch(_) {}
-      this.#flyPointerId = null;
-    }
+    if (document.pointerLockElement) document.exitPointerLock();
     this.orbitControls.enabled = true;
     // Sync orbit target in front of camera so pan feels natural after fly
     const dir = new THREE.Vector3();
     this.camera.getWorldDirection(dir);
     this.orbitControls.target.copy(this.camera.position).addScaledVector(dir, 2);
-    this.renderer.domElement.style.cursor = '';
   };
 
   #onFlyMouseMove = (e) => {
     if (!this.#rightMouseDown) return;
-    const sens = 0.003;
+    const sens = 0.002;
     this.#yaw   -= e.movementX * sens;
     this.#pitch -= e.movementY * sens;
     this.#pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.#pitch));
@@ -1143,14 +1138,19 @@ export class Editor {
   updateEntityColor(entityId, color) {
     const obj = this.renderSystem.getObject3D(entityId);
     if (!obj) return;
+    const hex = parseInt(color.replace("#", ""), 16);
+    const setColor = (mat) => { if (mat?.color) mat.color.set(hex); };
+    const setAll = (matOrArr) => {
+      if (Array.isArray(matOrArr)) matOrArr.forEach(setColor);
+      else setColor(matOrArr);
+    };
     obj.traverse((child) => {
       if (child.isMesh && child.material && !child.userData.isEditorIcon) {
-        const hex = parseInt(color.replace("#", ""), 16);
         if (child.userData._origMat) {
-          child.userData._origMat.color.set(hex);
-          if (this.#viewMode !== "default") child.material.color.set(hex);
+          setAll(child.userData._origMat);
+          if (this.#viewMode !== "default") setAll(child.material);
         } else {
-          child.material.color.set(hex);
+          setAll(child.material);
         }
         const meshComp = this.world.getComponent(entityId, MeshComponent);
         if (meshComp) meshComp.color = hex;
@@ -1326,18 +1326,19 @@ export class Editor {
     const cubet = new TransformComponent();
     cubet.position.set(0, 0.5, 0);
     this.world.addComponent(cubeId, cubet);
-    this.world.addComponent(cubeId, new MeshComponent("box", 0x4a9eff));
+    this.world.addComponent(cubeId, new MeshComponent("box", 0x888888));
     this.renderSystem.createObjectForEntity(cubeId);
 
-    // Floor box
-    const floorId = this.world.createEntity();
-    this.world.addComponent(floorId, new TagComponent("Floor"));
-    const ft = new TransformComponent();
-    ft.position.set(0, -0.5, 0);
-    ft.scale.set(50, 1, 50);
-    this.world.addComponent(floorId, ft);
-    this.world.addComponent(floorId, new MeshComponent("box", 0x888888));
-    this.renderSystem.createObjectForEntity(floorId);
+    // Terrain
+    const terrainId = this.world.createEntity();
+    this.world.addComponent(terrainId, new TagComponent("Terrain"));
+    const tt = new TransformComponent();
+    tt.position.set(0, 0, 0);
+    tt.rotation.x = -Math.PI / 2;
+    tt.scale.set(100, 100, 100);
+    this.world.addComponent(terrainId, tt);
+    this.world.addComponent(terrainId, new MeshComponent("terrain", 0x777777));
+    this.renderSystem.createObjectForEntity(terrainId);
   }
 
   #loadCurrentScene() {
@@ -1483,8 +1484,8 @@ export class Editor {
     this.renderer.domElement.removeEventListener("pointerup",   this.#onPointerUp);
     this.renderer.domElement.removeEventListener("pointermove", this.#onGizmoCursor);
     this.renderer.domElement.removeEventListener("pointerdown", this.#onRightMouseDown, true);
-    this.renderer.domElement.removeEventListener("pointermove", this.#onFlyMouseMove);
-    this.renderer.domElement.removeEventListener("pointerup",   this.#onRightMouseUp);
+    document.removeEventListener("mousemove", this.#onFlyMouseMove);
+    document.removeEventListener("mouseup",   this.#onRightMouseUp);
     window.removeEventListener("keydown",   this.#onFlyKeyDown);
     window.removeEventListener("keyup",     this.#onFlyKeyUp);
     this.orbitControls.dispose();

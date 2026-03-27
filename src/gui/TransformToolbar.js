@@ -43,9 +43,9 @@ export class TransformToolbar {
         const id = this.#editor.selectedEntityId;
         if (!this.#editor.isScaleLocked(id)) { sfx.click(); this.#editor.setTransformMode('scale'); }
       }
-      else if (e.key === 't' || e.key === 'T') { sfx.click(); this.#editor.setViewMode('default'); }
-      else if (e.key === 'y' || e.key === 'Y') { sfx.click(); this.#editor.setViewMode('unlit'); }
-      else if (e.key === 'u' || e.key === 'U') { sfx.click(); this.#editor.setViewMode('wireframe'); }
+      else if (e.key === '8') { sfx.click(); this.#editor.setViewMode('default'); }
+      else if (e.key === '9') { sfx.click(); this.#editor.setViewMode('unlit'); }
+      else if (e.key === '0') { sfx.click(); this.#editor.setViewMode('wireframe'); }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         const id = this.#editor.selectedEntityId;
         if (id !== null && !this.#editor.isUndeletable(id)) {
@@ -137,9 +137,9 @@ export class TransformToolbar {
         </div>
       </div>
       <div class="vt-group">
-        ${btn('view-default',   ico.lit,   view === 'default',   'Lit [T]')}
-        ${btn('view-unlit',     ico.unlit, view === 'unlit',     'Solid [Y]')}
-        ${btn('view-wireframe', ico.wire,  view === 'wireframe', 'Wireframe [U]')}
+        ${btn('view-default',   ico.lit,   view === 'default',   'Lit [8]')}
+        ${btn('view-unlit',     ico.unlit, view === 'unlit',     'Solid [9]')}
+        ${btn('view-wireframe', ico.wire,  view === 'wireframe', 'Wireframe [0]')}
       </div>
     `;
 

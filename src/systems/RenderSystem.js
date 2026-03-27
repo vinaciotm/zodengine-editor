@@ -337,21 +337,25 @@ export class RenderSystem {
 
     const isTerrain = comp.type === 'terrain';
 
+    const useChecker = (comp.texture ?? 'checker') !== 'none';
     const makeMat = () => {
-      const tex = this.#makeCheckerTexture(isTerrain).clone();
-      tex.needsUpdate = true; tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-      const base = { color: comp.color, map: tex };
+      const base = { color: comp.color };
+      if (useChecker) {
+        const tex = this.#makeCheckerTexture(isTerrain).clone();
+        tex.needsUpdate = true; tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+        base.map = tex;
+      }
       let m;
       switch (comp.materialType ?? 'standard') {
         case 'phong':    m = new THREE.MeshPhongMaterial({ ...base, shininess: comp.shininess ?? 30 }); break;
         case 'lambert':  m = new THREE.MeshLambertMaterial(base); break;
         case 'basic':    m = new THREE.MeshBasicMaterial(base); break;
         case 'toon':     m = new THREE.MeshToonMaterial(base); break;
-        default:         m = new THREE.MeshStandardMaterial({ ...base, roughness: comp.roughness ?? 0.5, metalness: comp.metalness ?? 0 });
+        default:         m = new THREE.MeshStandardMaterial({ ...base, roughness: comp.roughness ?? 0.6, metalness: comp.metalness ?? 0.4 });
       }
       if ((comp.opacity ?? 1) < 1) { m.transparent = true; m.opacity = comp.opacity; }
       if (comp.wireframe) m.wireframe = true;
-      m.userData.isCheckerMat = true;
+      m.userData.isCheckerMat = useChecker;
       return m;
     };
 
