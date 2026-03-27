@@ -24,7 +24,7 @@ export class TransformToolbar {
       this.#editor.on('entity:selected', () => {
         const id = this.#editor.selectedEntityId;
         if (id !== null && this.#editor.isScaleLocked(id) && this.#editor.transformMode === 'scale') {
-          this.#editor.setTransformMode('translate');
+          this.#editor.setTransformMode('select');
         }
         this.#render();
       }),
@@ -32,17 +32,20 @@ export class TransformToolbar {
 
     this.#keyHandler = (e) => {
       if (this.#editor.isPlaying) return;
+      if (this.#editor.isCameraFlying) return;
       const tag = e.target.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-      if (e.key === 'q' || e.key === 'Q') { sfx.click(); this.#editor.setTransformMode('translate'); }
-      else if (e.key === 'w' || e.key === 'W') { sfx.click(); this.#editor.setTransformMode('rotate'); }
-      else if (e.key === 'e' || e.key === 'E') {
+      if (e.metaKey || e.ctrlKey) return; // reserve cmd/ctrl combos for other handlers
+      if (e.key === 'q' || e.key === 'Q') { sfx.click(); this.#editor.setTransformMode('select'); }
+      else if (e.key === 'w' || e.key === 'W') { sfx.click(); this.#editor.setTransformMode('translate'); }
+      else if (e.key === 'e' || e.key === 'E') { sfx.click(); this.#editor.setTransformMode('rotate'); }
+      else if (e.key === 'r' || e.key === 'R') {
         const id = this.#editor.selectedEntityId;
         if (!this.#editor.isScaleLocked(id)) { sfx.click(); this.#editor.setTransformMode('scale'); }
       }
-      else if (e.key === 'r' || e.key === 'R') { sfx.click(); this.#editor.setViewMode('default'); }
-      else if (e.key === 't' || e.key === 'T') { sfx.click(); this.#editor.setViewMode('unlit'); }
-      else if (e.key === 'y' || e.key === 'Y') { sfx.click(); this.#editor.setViewMode('wireframe'); }
+      else if (e.key === 't' || e.key === 'T') { sfx.click(); this.#editor.setViewMode('default'); }
+      else if (e.key === 'y' || e.key === 'Y') { sfx.click(); this.#editor.setViewMode('unlit'); }
+      else if (e.key === 'u' || e.key === 'U') { sfx.click(); this.#editor.setViewMode('wireframe'); }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         const id = this.#editor.selectedEntityId;
         if (id !== null) {
@@ -67,6 +70,9 @@ export class TransformToolbar {
     const view = this.#editor.viewMode;
 
     const ico = {
+      select: `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 2 L3 13 L6.5 10 L9 14 L10.5 13.5 L8 9.5 L12 9.5 Z" fill="currentColor" opacity="0.85" stroke="none"/>
+      </svg>`,
       translate: `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <line x1="8" y1="1" x2="8" y2="15"/><line x1="1" y1="8" x2="15" y2="8"/>
         <polyline points="5.5,3.5 8,1 10.5,3.5"/><polyline points="5.5,12.5 8,15 10.5,12.5"/>
@@ -111,9 +117,10 @@ export class TransformToolbar {
     this.#el.innerHTML = `
       <div class="vt-left">
         <div class="vt-group">
-          ${btn('translate', ico.translate, mode === 'translate', 'Position [Q]')}
-          ${btn('rotate',    ico.rotate,    mode === 'rotate',    'Rotation [W]')}
-          ${btn('scale',     ico.scale,     mode === 'scale',     'Scale [E]', scaleLocked)}
+          ${btn('select',    ico.select,    mode === 'select',    'Cursor [Q]')}
+          ${btn('translate', ico.translate, mode === 'translate', 'Position [W]')}
+          ${btn('rotate',    ico.rotate,    mode === 'rotate',    'Rotation [E]')}
+          ${btn('scale',     ico.scale,     mode === 'scale',     'Scale [R]', scaleLocked)}
         </div>
         <div class="vt-group vt-snap-group">
           <button class="vt-btn vt-snap-btn${this.#snapEnabled ? ' active' : ''}" data-action="snap-toggle" title="Grid Snap">
@@ -130,9 +137,9 @@ export class TransformToolbar {
         </div>
       </div>
       <div class="vt-group">
-        ${btn('view-default',   ico.lit,   view === 'default',   'Lit [R]')}
-        ${btn('view-unlit',     ico.unlit, view === 'unlit',     'Unlit [T]')}
-        ${btn('view-wireframe', ico.wire,  view === 'wireframe', 'Wireframe [Y]')}
+        ${btn('view-default',   ico.lit,   view === 'default',   'Lit [T]')}
+        ${btn('view-unlit',     ico.unlit, view === 'unlit',     'Solid [Y]')}
+        ${btn('view-wireframe', ico.wire,  view === 'wireframe', 'Wireframe [U]')}
       </div>
     `;
 
@@ -140,7 +147,7 @@ export class TransformToolbar {
       b.addEventListener('click', () => {
         sfx.click();
         const a = b.dataset.action;
-        if (a === 'translate' || a === 'rotate' || a === 'scale') {
+        if (a === 'select' || a === 'translate' || a === 'rotate' || a === 'scale') {
           if (a === 'scale' && scaleLocked) return;
           this.#editor.setTransformMode(a);
         } else if (a === 'snap-toggle') {

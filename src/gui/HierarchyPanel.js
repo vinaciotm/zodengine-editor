@@ -64,6 +64,8 @@ export class HierarchyPanel {
     });
   }
 
+  #dragSrcId = null;
+
   #render() {
     const editor = this.#editor;
     const entities = editor.world?.entities ?? [];
@@ -98,6 +100,29 @@ export class HierarchyPanel {
       const row = document.createElement('div');
       row.className = 'hierarchy-item' + (isSelected ? ' selected' : '') + (isVisible ? '' : ' entity-hidden');
       row.dataset.entityId = id;
+      row.draggable = true;
+
+      row.addEventListener('dragstart', (e) => {
+        this.#dragSrcId = id;
+        e.dataTransfer.effectAllowed = 'move';
+        row.style.opacity = '0.5';
+      });
+      row.addEventListener('dragend', () => { row.style.opacity = ''; });
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        row.style.outline = '1px dashed var(--accent,#4a9eff)';
+      });
+      row.addEventListener('dragleave', () => { row.style.outline = ''; });
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.style.outline = '';
+        const srcId = this.#dragSrcId;
+        this.#dragSrcId = null;
+        if (srcId === null || srcId === id) return;
+        editor.world.moveEntityBefore(srcId, id);
+        editor.emit('hierarchy:changed');
+      });
 
       const indentEl = document.createElement('span');
       indentEl.className = 'hierarchy-item-indent';

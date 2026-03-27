@@ -66,6 +66,9 @@ export class Editor {
   #pointerDownPos = null;
   #pointerDragged = false;
   #grid = null;
+  #rightMouseDown = false;
+  #keysHeld = new Set();
+  #flySpeed = 8;
 
   #listeners = new Map();
   container = null;
@@ -89,6 +92,10 @@ export class Editor {
 
   get viewMode() {
     return this.#viewMode;
+  }
+
+  get isCameraFlying() {
+    return this.#rightMouseDown;
   }
 
   async init(container) {
@@ -115,8 +122,8 @@ export class Editor {
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.5;
+    this.renderer.toneMapping = THREE.ReinhardToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
     container.appendChild(this.renderer.domElement);
 
     this.#grid = new THREE.GridHelper(80, 80, 0x444444, 0x2a2a2a);
@@ -198,6 +205,11 @@ export class Editor {
     this.renderer.domElement.addEventListener("pointermove",  this.#onPointerMove);
     this.renderer.domElement.addEventListener("pointerup",    this.#onPointerUp);
     this.renderer.domElement.addEventListener("pointermove",  this.#onGizmoCursor);
+    this.renderer.domElement.addEventListener("mousedown",    this.#onRightMouseDown);
+    this.renderer.domElement.addEventListener("mouseup",      this.#onRightMouseUp);
+    this.renderer.domElement.addEventListener("contextmenu",  (e) => e.preventDefault());
+    window.addEventListener("keydown", this.#onFlyKeyDown);
+    window.addEventListener("keyup",   this.#onFlyKeyUp);
 
     this.#resizeObserver = new ResizeObserver(() => this.#onResize());
     this.#resizeObserver.observe(container);
@@ -239,6 +251,7 @@ export class Editor {
     this.#animFrameId = requestAnimationFrame(this.#animate);
     this.#clock.update();
     const delta = this.#clock.getDelta();
+    this.#applyFlyMovement(delta);
     this.world.update(delta);
     this.orbitControls.update();
     this.#syncHelpers();
@@ -465,6 +478,51 @@ export class Editor {
     }
   };
 
+  #onRightMouseDown = (e) => {
+    if (e.button !== 2) return;
+    this.#rightMouseDown = true;
+    this.orbitControls.enabled = false;
+    this.renderer.domElement.style.cursor = 'crosshair';
+  };
+
+  #onRightMouseUp = (e) => {
+    if (e.button !== 2) return;
+    this.#rightMouseDown = false;
+    this.orbitControls.enabled = true;
+    this.renderer.domElement.style.cursor = '';
+  };
+
+  #onFlyKeyDown = (e) => {
+    if (this.#rightMouseDown) this.#keysHeld.add(e.code);
+  };
+
+  #onFlyKeyUp = (e) => {
+    this.#keysHeld.delete(e.code);
+  };
+
+  #applyFlyMovement(delta) {
+    if (!this.#rightMouseDown || this.#keysHeld.size === 0) return;
+    const speed = this.#flySpeed * delta;
+    const cam = this.camera;
+    const forward = new THREE.Vector3();
+    cam.getWorldDirection(forward);
+    forward.y = 0; forward.normalize();
+    const right = new THREE.Vector3();
+    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+    const move = new THREE.Vector3();
+    if (this.#keysHeld.has('KeyW') || this.#keysHeld.has('ArrowUp'))    move.addScaledVector(forward,  1);
+    if (this.#keysHeld.has('KeyS') || this.#keysHeld.has('ArrowDown'))  move.addScaledVector(forward, -1);
+    if (this.#keysHeld.has('KeyA') || this.#keysHeld.has('ArrowLeft'))  move.addScaledVector(right,   -1);
+    if (this.#keysHeld.has('KeyD') || this.#keysHeld.has('ArrowRight')) move.addScaledVector(right,    1);
+    if (this.#keysHeld.has('KeyQ')) move.y -= 1;
+    if (this.#keysHeld.has('KeyE')) move.y += 1;
+    if (move.lengthSq() > 0) {
+      move.normalize().multiplyScalar(speed);
+      cam.position.add(move);
+      this.orbitControls.target.add(move);
+    }
+  }
+
   #onPointerDown = (e) => {
     if (e.button !== 0) return;
     this.#pointerDownPos = { x: e.clientX, y: e.clientY };
@@ -517,7 +575,7 @@ export class Editor {
     this.selectedEntityIds.clear();
     if (entityId !== null) this.selectedEntityIds.add(entityId);
 
-    if (entityId === null) {
+    if (entityId === null || this.transformMode === 'select') {
       this.transformControls.detach();
     } else {
       const obj = this.renderSystem.getObject3D(entityId);
@@ -540,7 +598,15 @@ export class Editor {
 
   setTransformMode(mode) {
     this.transformMode = mode;
-    this.transformControls.setMode(mode);
+    if (mode === 'select') {
+      this.transformControls.detach();
+    } else {
+      this.transformControls.setMode(mode);
+      if (this.selectedEntityId !== null) {
+        const obj = this.renderSystem.getObject3D(this.selectedEntityId);
+        if (obj) this.transformControls.attach(obj);
+      }
+    }
     this.emit("transformMode:changed", mode);
   }
 
@@ -594,6 +660,30 @@ export class Editor {
 
     this.selectEntity(groupId);
     this.emit("hierarchy:changed");
+  }
+
+  // cmd+shift+g: if entity is a group → ungroup all; if entity is inside a group → remove it
+  ungroupOrRemoveFromGroup(entityId) {
+    const isGroup = this.world.hasComponent(entityId, GroupComponent);
+    if (isGroup) {
+      this.ungroupEntity(entityId);
+      return;
+    }
+    const parentComp = this.world.getComponent(entityId, ParentComponent);
+    if (parentComp) {
+      const groupId = parentComp.parentId;
+      const t = this.world.getComponent(entityId, TransformComponent);
+      const groupTransform = this.world.getComponent(groupId, TransformComponent);
+      if (t && groupTransform) t.position.add(groupTransform.position);
+      this.world.removeComponent(entityId, ParentComponent);
+      const childObj = this.renderSystem.getObject3D(entityId);
+      if (childObj) {
+        childObj.removeFromParent();
+        this.threeScene.add(childObj);
+        if (t) childObj.position.copy(t.position);
+      }
+      this.emit('hierarchy:changed');
+    }
   }
 
   ungroupEntity(groupEntityId) {
@@ -768,32 +858,53 @@ export class Editor {
 
   spawnCube() {
     return this.spawnEntity("Cube", (id) =>
-      this.world.addComponent(id, new MeshComponent("box", 0x4a9eff)),
+      this.world.addComponent(id, new MeshComponent("box", 0x888888)),
     );
   }
   spawnSphere() {
     return this.spawnEntity("Sphere", (id) =>
-      this.world.addComponent(id, new MeshComponent("sphere", 0xff6b4a)),
+      this.world.addComponent(id, new MeshComponent("sphere", 0x888888)),
     );
   }
   spawnCone() {
     return this.spawnEntity("Cone", (id) =>
-      this.world.addComponent(id, new MeshComponent("cone", 0x4aff6b)),
+      this.world.addComponent(id, new MeshComponent("cone", 0x888888)),
     );
   }
   spawnCylinder() {
     return this.spawnEntity("Cylinder", (id) =>
-      this.world.addComponent(id, new MeshComponent("cylinder", 0xffcc4a)),
+      this.world.addComponent(id, new MeshComponent("cylinder", 0x888888)),
     );
   }
   spawnCapsule() {
     return this.spawnEntity("Capsule", (id) =>
-      this.world.addComponent(id, new MeshComponent("capsule", 0xcc4aff)),
+      this.world.addComponent(id, new MeshComponent("capsule", 0x888888)),
     );
   }
   spawnPlane() {
-    return this.spawnEntity("Plane", (id) =>
-      this.world.addComponent(id, new MeshComponent("plane", 0x888888)),
+    return this.spawnEntity("Plane", (id) => {
+      this.world.addComponent(id, new MeshComponent("plane", 0x888888));
+      const t = this.world.getComponent(id, TransformComponent);
+      if (t) {
+        t.position.set(0, 0, 0);
+        t.rotation.x = -Math.PI / 2;
+        t.scale.set(3, 3, 3);
+      }
+    });
+  }
+  spawnRamp() {
+    return this.spawnEntity("Ramp", (id) =>
+      this.world.addComponent(id, new MeshComponent("ramp", 0x888888)),
+    );
+  }
+  spawnBarrel() {
+    return this.spawnEntity("Barrel", (id) =>
+      this.world.addComponent(id, new MeshComponent("barrel", 0x888888)),
+    );
+  }
+  spawnScrew() {
+    return this.spawnEntity("Screw", (id) =>
+      this.world.addComponent(id, new MeshComponent("screw", 0x888888)),
     );
   }
   // Use higher default intensities so lights are visible in physical rendering mode

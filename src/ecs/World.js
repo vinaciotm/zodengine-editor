@@ -54,6 +54,28 @@ export class World {
 
   get entities() { return [...this.#entities]; }
 
+  moveEntityBefore(id, beforeId) {
+    if (id === beforeId) return;
+    const arr = [...this.#entities];
+    const fromIdx = arr.indexOf(id);
+    if (fromIdx === -1) return;
+    arr.splice(fromIdx, 1);
+    const toIdx = arr.indexOf(beforeId);
+    if (toIdx === -1) { arr.push(id); } else { arr.splice(toIdx, 0, id); }
+    this.#entities = new Set(arr);
+  }
+
+  moveEntityAfter(id, afterId) {
+    if (id === afterId) return;
+    const arr = [...this.#entities];
+    const fromIdx = arr.indexOf(id);
+    if (fromIdx === -1) return;
+    arr.splice(fromIdx, 1);
+    const toIdx = arr.indexOf(afterId);
+    if (toIdx === -1) { arr.unshift(id); } else { arr.splice(toIdx + 1, 0, id); }
+    this.#entities = new Set(arr);
+  }
+
   clear() {
     for (const id of [...this.#entities]) this.destroyEntity(id);
     this.#nextEntityId = 1;

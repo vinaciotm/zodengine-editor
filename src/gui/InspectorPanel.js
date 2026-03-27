@@ -271,7 +271,7 @@ export class InspectorPanel {
     typeRow.innerHTML = '<span class="inspector-label">Type</span>';
     const sel = document.createElement('select');
     sel.className = 'inspector-select';
-    ['box','sphere','cone','cylinder','capsule','plane'].forEach(t => {
+    ['box','sphere','cone','cylinder','capsule','plane','ramp','barrel','screw'].forEach(t => {
       const opt = document.createElement('option');
       opt.value = t; opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
       if (t === mesh.type) opt.selected = true;

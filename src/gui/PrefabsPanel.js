@@ -45,6 +45,9 @@ export class PrefabsPanel {
         { spawn: 'cylinder', label: 'Cylinder' },
         { spawn: 'capsule',  label: 'Capsule' },
         { spawn: 'plane',    label: 'Plane' },
+        { spawn: 'ramp',     label: 'Ramp' },
+        { spawn: 'barrel',   label: 'Barrel' },
+        { spawn: 'screw',    label: 'Screw' },
       ],
       luz: [
         { spawn: 'pointlight', label: 'Point' },
@@ -62,6 +65,8 @@ export class PrefabsPanel {
         { spawn: 'boxtrigger',    label: 'BoxTrig' },
         { spawn: 'playerstart',   label: 'Start' },
       ],
+      modelos: [],
+      prefabs: [],
     };
 
     const catDefs = [
@@ -69,6 +74,8 @@ export class PrefabsPanel {
       { id: 'luz',      icon: '&#128161;',  label: 'Luz' },
       { id: 'ambiente', icon: '&#127774;',  label: 'Ambiente' },
       { id: 'jogo',     icon: '&#127918;',  label: 'Jogo' },
+      { id: 'modelos',  icon: '&#128190;',  label: 'Modelos' },
+      { id: 'prefabs',  icon: '&#11835;',   label: 'Prefabs' },
     ];
 
     const spawnMap = {
@@ -78,6 +85,9 @@ export class PrefabsPanel {
       cylinder:     () => this.#editor.spawnCylinder(),
       capsule:      () => this.#editor.spawnCapsule(),
       plane:        () => this.#editor.spawnPlane(),
+      ramp:         () => this.#editor.spawnRamp(),
+      barrel:       () => this.#editor.spawnBarrel(),
+      screw:        () => this.#editor.spawnScrew(),
       pointlight:   () => this.#editor.spawnPointLight(),
       dirlight:     () => this.#editor.spawnDirectionalLight(),
       spotlight:    () => this.#editor.spawnSpotLight(),
@@ -134,6 +144,41 @@ export class PrefabsPanel {
 
     const showCategory = (cat) => {
       grid.innerHTML = '';
+
+      // Modelos tab: import button + empty list
+      if (cat === 'modelos') {
+        const importBtn = document.createElement('button');
+        importBtn.className = 'asset-item asset-import-btn';
+        importBtn.innerHTML = `<span style="font-size:18px;display:block;margin-bottom:2px;">&#8853;</span><span class="asset-label">Import</span>`;
+        importBtn.title = 'Import 3D model (GLB/GLTF)';
+        importBtn.addEventListener('click', () => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.glb,.gltf,.obj,.fbx';
+          input.addEventListener('change', () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            this.#editor.emit('model:import', file);
+          });
+          input.click();
+        });
+        grid.appendChild(importBtn);
+        const emptyMsg = document.createElement('div');
+        emptyMsg.style.cssText = 'color:var(--text-muted,#777);font-size:10px;padding:8px 4px;text-align:center;width:100%;';
+        emptyMsg.textContent = 'No models imported';
+        grid.appendChild(emptyMsg);
+        return;
+      }
+
+      // Prefabs tab: empty state
+      if (cat === 'prefabs') {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.style.cssText = 'color:var(--text-muted,#777);font-size:10px;padding:8px 4px;text-align:center;width:100%;';
+        emptyMsg.textContent = 'No prefabs saved';
+        grid.appendChild(emptyMsg);
+        return;
+      }
+
       for (const item of (categories[cat] ?? [])) {
         const btn = document.createElement('button');
         btn.className = 'asset-item';
@@ -141,7 +186,7 @@ export class PrefabsPanel {
         const canvasType = CANVAS_ICON_MAP[item.spawn];
         const iconHtml = canvasType
           ? `<img src="${iconURL(canvasType)}" width="22" height="22" style="display:block;margin:0 auto 2px;">`
-          : `<span class="asset-icon">${item.icon ?? ''}</span>`;
+          : `<span class="asset-icon" style="font-size:20px;display:block;margin-bottom:2px;">${item.icon ?? '&#9635;'}</span>`;
         btn.innerHTML = `${iconHtml}<span class="asset-label">${item.label}</span>`;
         btn.addEventListener('click', () => {
           const id = spawnMap[item.spawn]?.();

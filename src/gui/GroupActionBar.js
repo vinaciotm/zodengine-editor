@@ -18,9 +18,18 @@ export class GroupActionBar {
 
     this.#keyHandler = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-      if (e.key === 'g' || e.key === 'G') {
+      const isCmdG = (e.metaKey || e.ctrlKey) && (e.key === 'g' || e.key === 'G');
+      if (!isCmdG) return;
+      e.preventDefault();
+      if (e.shiftKey) {
+        // cmd+shift+g: ungroup selected group OR remove selected entity from its group
+        const id = this.#editor.selectedEntityId;
+        if (id !== null) {
+          this.#editor.ungroupOrRemoveFromGroup(id);
+        }
+      } else {
+        // cmd+g: group selected entities
         if (this.#editor.selectedEntityIds.size >= 2) {
-          e.preventDefault();
           this.#editor.groupSelectedEntities();
         }
       }

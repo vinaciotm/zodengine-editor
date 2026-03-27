@@ -18,6 +18,26 @@ export class RenderSystem {
   lightingEnabled = true;
   shadowsEnabled = true;
   #parentCompClass = null;
+  #checkerTexture = null;
+
+  #makeCheckerTexture() {
+    if (this.#checkerTexture) return this.#checkerTexture;
+    const size = 128;
+    const half = size / 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#999999'; ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#c0c0c0';
+    ctx.fillRect(0, 0, half, half);
+    ctx.fillRect(half, half, half, half);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 1);
+    this.#checkerTexture = tex;
+    return tex;
+  }
 
   constructor(threeScene) {
     this.scene = threeScene;
@@ -194,6 +214,13 @@ export class RenderSystem {
         obj.rotation.copy(t.rotation);
         obj.scale.copy(t.scale);
 
+        // Sync checker texture repeat to world scale so tiles stay world-unit size
+        if (obj.isMesh && obj.material?.userData?.isCheckerMat && obj.material.map) {
+          const rx = Math.max(0.01, Math.abs(t.scale.x));
+          const ry = Math.max(0.01, Math.abs(t.scale.z));
+          obj.material.map.repeat.set(rx, ry);
+        }
+
         // Counter-scale editor icon children so scale gizmo doesn't distort them.
         // Sprites need their base scale restored; line/mesh debug groups keep world-unit size.
         const sx = Math.abs(t.scale.x) || 1;
@@ -268,15 +295,24 @@ export class RenderSystem {
 
   #makeMesh(comp) {
     const geos = {
-      box: () => new THREE.BoxGeometry(1, 1, 1),
-      sphere: () => new THREE.SphereGeometry(0.5, 32, 32),
-      cone: () => new THREE.ConeGeometry(0.5, 1, 32),
+      box:      () => new THREE.BoxGeometry(1, 1, 1),
+      sphere:   () => new THREE.SphereGeometry(0.5, 32, 32),
+      cone:     () => new THREE.ConeGeometry(0.5, 1, 32),
       cylinder: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 32),
-      capsule: () => new THREE.CapsuleGeometry(0.3, 0.6, 4, 16),
-      plane: () => new THREE.PlaneGeometry(1, 1),
+      capsule:  () => new THREE.CapsuleGeometry(0.3, 0.6, 4, 16),
+      plane:    () => new THREE.PlaneGeometry(1, 1),
+      ramp:     () => this.#makeRampGeo(),
+      barrel:   () => this.#makeBarrelGeo(),
+      screw:    () => new THREE.TorusKnotGeometry(0.35, 0.12, 128, 16, 2, 3),
     };
     const geo = (geos[comp.type] ?? geos.box)();
-    const base = { color: comp.color };
+
+    const checkerTex = this.#makeCheckerTexture().clone();
+    checkerTex.needsUpdate = true;
+    checkerTex.wrapS = THREE.RepeatWrapping;
+    checkerTex.wrapT = THREE.RepeatWrapping;
+
+    const base = { color: comp.color, map: checkerTex };
     let mat;
     switch (comp.materialType ?? 'standard') {
       case 'phong':
@@ -296,10 +332,50 @@ export class RenderSystem {
     }
     if ((comp.opacity ?? 1) < 1) { mat.transparent = true; mat.opacity = comp.opacity; }
     if (comp.wireframe) mat.wireframe = true;
+    mat.userData.isCheckerMat = true;
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     return mesh;
+  }
+
+  #makeRampGeo() {
+    // Wedge/ramp: 6 vertices - 4 on bottom, 2 elevated at back
+    // v0=front-left-bottom, v1=front-right-bottom, v2=back-left-bottom, v3=back-right-bottom
+    // v4=back-left-top,     v5=back-right-top
+    const geo = new THREE.BufferGeometry();
+    const v = new Float32Array([
+      -0.5, 0,  0.5,   // 0 front-left-bottom
+       0.5, 0,  0.5,   // 1 front-right-bottom
+      -0.5, 0, -0.5,   // 2 back-left-bottom
+       0.5, 0, -0.5,   // 3 back-right-bottom
+      -0.5, 1, -0.5,   // 4 back-left-top
+       0.5, 1, -0.5,   // 5 back-right-top
+    ]);
+    const idx = [
+      0,2,1, 1,2,3,   // bottom (CCW from below)
+      2,4,3, 3,4,5,   // back vertical face
+      0,1,4, 1,5,4,   // slope (top face)
+      0,4,2,           // left triangle
+      1,3,5,           // right triangle
+    ];
+    geo.setIndex(idx);
+    geo.setAttribute('position', new THREE.BufferAttribute(v, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  #makeBarrelGeo() {
+    const pts = [];
+    const segments = 12;
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments; // 0..1
+      const y = t - 0.5; // -0.5..0.5
+      // Barrel bulge: radius varies as 0.4 + 0.1*sin(pi*t)
+      const r = 0.4 + 0.12 * Math.sin(Math.PI * t);
+      pts.push(new THREE.Vector2(r, y));
+    }
+    return new THREE.LatheGeometry(pts, 24);
   }
 
   #makeLight(comp) {
