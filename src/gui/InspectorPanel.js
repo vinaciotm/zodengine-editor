@@ -185,19 +185,34 @@ export class InspectorPanel {
     bgInp.addEventListener('input', () => this.#editor.setSceneBackground(bgInp.value));
     bgRow.appendChild(bgInp);
 
+    const mkSlider = (label, min, max, step, getVal, setVal) => {
+      const row = mkRow(label);
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;align-items:center;gap:6px;flex:1;';
+      const sl = document.createElement('input');
+      sl.type = 'range'; sl.min = String(min); sl.max = String(max); sl.step = String(step);
+      sl.value = String(getVal()); sl.style.flex = '1';
+      const lbl = document.createElement('span');
+      lbl.style.cssText = 'font-size:10px;color:var(--text-muted,#888);min-width:32px;text-align:right;';
+      lbl.textContent = parseFloat(sl.value).toFixed(2);
+      sl.addEventListener('input', () => { lbl.textContent = parseFloat(sl.value).toFixed(2); setVal(parseFloat(sl.value)); });
+      wrap.appendChild(sl); wrap.appendChild(lbl); row.appendChild(wrap);
+    };
+
     heading('Rendering');
     const tmRow = mkRow('ToneMap');
-    const TM = THREE;
     const tmOptions = [
-      [String(TM.ReinhardToneMapping),    'Reinhard'],
-      [String(TM.ACESFilmicToneMapping),  'ACES Filmic'],
-      [String(TM.LinearToneMapping),      'Linear'],
-      [String(TM.CineonToneMapping),      'Cineon'],
-      [String(TM.AgXToneMapping ?? 7),    'AgX'],
-      [String(TM.NoToneMapping),          'None'],
+      [String(THREE.ReinhardToneMapping),    'Reinhard'],
+      [String(THREE.ACESFilmicToneMapping),  'ACES Filmic'],
+      [String(THREE.LinearToneMapping),      'Linear'],
+      [String(THREE.CineonToneMapping),      'Cineon'],
+      [String(THREE.AgXToneMapping ?? 7),    'AgX'],
+      [String(THREE.NoToneMapping),          'None'],
     ];
     const tmSel = mkSel(tmOptions, this.#editor.getToneMapping(), (v) => this.#editor.setToneMapping(Number(v)));
     tmRow.appendChild(tmSel);
+    mkSlider('Intensity', 0.1, 5, 0.01, () => this.#editor.getToneMappingExposure(), v => this.#editor.setToneMappingExposure(v));
+    mkSlider('Dark',      0,   1, 0.01, () => this.#editor.getToneMappingDark(),     v => this.#editor.setToneMappingDark(v));
 
     heading('Environment');
     const envRow = mkRow('Preset');
@@ -208,25 +223,8 @@ export class InspectorPanel {
     const currentEnv = this.#editor.getEnvironmentPreset?.() ?? 'none';
     const envSel = mkSel(envOptions, currentEnv, (v) => this.#editor.setEnvironmentPreset(v));
     envRow.appendChild(envSel);
-
-    const blurRow = mkRow('Blur');
-    blurRow.style.marginTop = '4px';
-    const blurWrap = document.createElement('div');
-    blurWrap.style.cssText = 'display:flex;align-items:center;gap:6px;flex:1;';
-    const blurSlider = document.createElement('input');
-    blurSlider.type = 'range'; blurSlider.min = '0'; blurSlider.max = '1'; blurSlider.step = '0.01';
-    blurSlider.value = String(this.#editor.getEnvironmentBlur());
-    blurSlider.style.flex = '1';
-    const blurVal = document.createElement('span');
-    blurVal.style.cssText = 'font-size:10px;color:var(--text-muted,#888);min-width:28px;';
-    blurVal.textContent = blurSlider.value;
-    blurSlider.addEventListener('input', () => {
-      blurVal.textContent = blurSlider.value;
-      this.#editor.setEnvironmentBlur(parseFloat(blurSlider.value));
-    });
-    blurWrap.appendChild(blurSlider);
-    blurWrap.appendChild(blurVal);
-    blurRow.appendChild(blurWrap);
+    mkSlider('Intensity', 0, 3,   0.01, () => this.#editor.getEnvironmentIntensity(), v => this.#editor.setEnvironmentIntensity(v));
+    mkSlider('Blur',      0, 1,   0.01, () => this.#editor.getEnvironmentBlur(),      v => this.#editor.setEnvironmentBlur(v));
 
     content.appendChild(wrap);
   }

@@ -187,7 +187,13 @@ export class RenderSystem {
       // Sky entities: sync SkyMesh uniforms
       if (obj.userData.isSkyEntity) {
         const skyMeshRef = obj.userData.skyMeshRef;
-        if (!obj.visible) {
+        // Check effective visibility: entity or any ancestor group might be hidden
+        let effectivelyVisible = obj.visible;
+        if (effectivelyVisible) {
+          let p = obj.parent;
+          while (p && p !== this.scene) { if (!p.visible) { effectivelyVisible = false; break; } p = p.parent; }
+        }
+        if (!effectivelyVisible) {
           if (skyMeshRef && skyMeshRef.parent) skyMeshRef.parent.remove(skyMeshRef);
           // Still apply transform to move the invisible marker
           const st = this.world?.getComponent(entityId, TransformComponent);

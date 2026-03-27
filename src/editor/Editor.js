@@ -183,6 +183,26 @@ export class Editor {
         TransformComponent,
       );
       if (tc) {
+        if (this.transformMode === 'scale') {
+          // Clamp scale minimum to 0.1 (prevent inverting through zero)
+          obj.scale.set(
+            Math.max(0.1, obj.scale.x),
+            Math.max(0.1, obj.scale.y),
+            Math.max(0.1, obj.scale.z),
+          );
+          // Without Shift: offset position to keep base face fixed (one-directional scale)
+          const shiftHeld = this.#keysHeld.has('ShiftLeft') || this.#keysHeld.has('ShiftRight');
+          if (!shiftHeld && this.#transformBefore) {
+            const before = this.#transformBefore;
+            const ds = new THREE.Vector3(
+              (obj.scale.x - before.scale.x) / 2,
+              (obj.scale.y - before.scale.y) / 2,
+              (obj.scale.z - before.scale.z) / 2,
+            );
+            ds.applyQuaternion(obj.quaternion);
+            obj.position.copy(before.position).add(ds);
+          }
+        }
         tc.position.copy(obj.position);
         tc.rotation.copy(obj.rotation);
         tc.scale.copy(obj.scale);
@@ -695,6 +715,41 @@ export class Editor {
   }
 
   // cmd+shift+g: if entity is a group → ungroup all; if entity is inside a group → remove it
+  // Reparent entity into a group. Adjusts local position to maintain world position.
+  setEntityParent(entityId, parentId) {
+    if (entityId === parentId) return;
+    if (!this.world.hasComponent(parentId, GroupComponent)) return;
+    const obj      = this.renderSystem.getObject3D(entityId);
+    const parentObj = this.renderSystem.getObject3D(parentId);
+    if (!obj || !parentObj) return;
+    // Adjust position: subtract parent world position so entity stays in place
+    const t  = this.world.getComponent(entityId, TransformComponent);
+    const pt = this.world.getComponent(parentId,  TransformComponent);
+    if (t && pt) t.position.sub(pt.position);
+    // Move in Three.js hierarchy
+    obj.removeFromParent();
+    parentObj.add(obj);
+    if (t) obj.position.copy(t.position);
+    // Update or add ParentComponent
+    const existing = this.world.getComponent(entityId, ParentComponent);
+    if (existing) { existing.parentId = parentId; }
+    else          { this.world.addComponent(entityId, new ParentComponent(parentId)); }
+    this.emit('hierarchy:changed');
+  }
+
+  // Remove entity from its parent group, restoring world position.
+  removeEntityFromGroup(entityId) {
+    const pc = this.world.getComponent(entityId, ParentComponent);
+    if (!pc) return;
+    const t  = this.world.getComponent(entityId, TransformComponent);
+    const pt = this.world.getComponent(pc.parentId, TransformComponent);
+    if (t && pt) t.position.add(pt.position);
+    const obj = this.renderSystem.getObject3D(entityId);
+    if (obj) { obj.removeFromParent(); this.threeScene.add(obj); if (t) obj.position.copy(t.position); }
+    this.world.removeComponent(entityId, ParentComponent);
+    this.emit('hierarchy:changed');
+  }
+
   ungroupOrRemoveFromGroup(entityId) {
     const isGroup = this.world.hasComponent(entityId, GroupComponent);
     if (isGroup) {
@@ -1202,23 +1257,37 @@ export class Editor {
     if (scene) scene.background = hexStr;
   }
 
-  getToneMapping() {
-    return this.renderer?.toneMapping ?? THREE.ReinhardToneMapping;
+  // Combined exposure = intensity * (1 - dark * 0.8) so both sliders have visual effect
+  #calcExposure(intensity, dark) {
+    return Math.max(0.01, intensity * (1.0 - dark * 0.8));
   }
+
+  getToneMapping()          { return this.renderer?.toneMapping ?? THREE.ReinhardToneMapping; }
+  getToneMappingExposure()  { return this.#currentScene()?.tmExposure ?? 1.0; }
+  getToneMappingDark()      { return this.#currentScene()?.tmDark ?? 0.0; }
 
   setToneMapping(value) {
     if (this.renderer) this.renderer.toneMapping = value;
     const scene = this.#currentScene();
     if (scene) scene.toneMapping = value;
   }
-
-  getEnvironmentBlur() {
-    return this.threeScene.backgroundBlurriness ?? 0;
+  setToneMappingExposure(value) {
+    const scene = this.#currentScene();
+    if (scene) scene.tmExposure = value;
+    if (this.renderer) this.renderer.toneMappingExposure = this.#calcExposure(value, scene?.tmDark ?? 0);
   }
+  setToneMappingDark(value) {
+    const scene = this.#currentScene();
+    if (scene) scene.tmDark = value;
+    if (this.renderer) this.renderer.toneMappingExposure = this.#calcExposure(scene?.tmExposure ?? 1, value);
+  }
+
+  getEnvironmentBlur()      { return this.threeScene.backgroundBlurriness ?? 0; }
+  getEnvironmentIntensity() { return this.#currentScene()?.envIntensity ?? 1; }
+  getEnvironmentPreset()    { return this.#currentScene()?.envPreset ?? 'none'; }
 
   async setEnvironmentPreset(preset) {
     const { RGBELoader } = await import('three/addons/loaders/RGBELoader.js');
-    const PMREMGenerator = THREE.PMREMGenerator;
     const urls = {
       none:     null,
       forest:   'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/forest_slope_1k.hdr',
@@ -1229,6 +1298,7 @@ export class Editor {
     };
     if (preset === 'none' || !urls[preset]) {
       this.threeScene.environment = null;
+      this.threeScene.background  = new THREE.Color(this.#currentScene()?.background ?? '#1a1a1a');
       const scene = this.#currentScene();
       if (scene) scene.envPreset = 'none';
       return;
@@ -1236,10 +1306,11 @@ export class Editor {
     try {
       const loader = new RGBELoader();
       const texture = await loader.loadAsync(urls[preset]);
-      const pmrem = new PMREMGenerator(this.renderer);
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
       const envMap = pmrem.fromEquirectangular(texture).texture;
       pmrem.dispose(); texture.dispose();
       this.threeScene.environment = envMap;
+      this.threeScene.background  = envMap;   // show HDR as background image
       this.threeScene.backgroundBlurriness = this.getEnvironmentBlur();
       const scene = this.#currentScene();
       if (scene) scene.envPreset = preset;
@@ -1253,9 +1324,10 @@ export class Editor {
     const scene = this.#currentScene();
     if (scene) scene.envBlur = value;
   }
-
-  getEnvironmentPreset() {
-    return this.#currentScene()?.envPreset ?? 'none';
+  setEnvironmentIntensity(value) {
+    this.threeScene.backgroundIntensity = value;
+    const scene = this.#currentScene();
+    if (scene) scene.envIntensity = value;
   }
 
   // --- Scene management ---
@@ -1352,6 +1424,16 @@ export class Editor {
       this.world.clear();
       this.renderSystem.rebuildAll();
       this.#spawnDefaultScene();
+    }
+    // Restore per-scene rendering settings
+    this.renderer.toneMapping = scene?.toneMapping ?? THREE.ReinhardToneMapping;
+    this.renderer.toneMappingExposure = this.#calcExposure(scene?.tmExposure ?? 1.0, scene?.tmDark ?? 0.0);
+    // Restore per-scene environment (async, but fire and forget)
+    this.threeScene.environment = null;
+    this.threeScene.backgroundBlurriness = scene?.envBlur ?? 0;
+    this.threeScene.backgroundIntensity  = scene?.envIntensity ?? 1;
+    if (scene?.envPreset && scene.envPreset !== 'none') {
+      this.setEnvironmentPreset(scene.envPreset); // async load
     }
     // Restore scene background
     if (scene?.background) {

@@ -1,6 +1,7 @@
 import { sfx } from './sfx.js';
 import { showConfirm } from './utils.js';
 import { TagComponent } from '../components/TagComponent.js';
+import { SC } from '../editor/shortcuts.js';
 
 export class TransformToolbar {
   #el = null;
@@ -36,16 +37,17 @@ export class TransformToolbar {
       const tag = e.target.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
       if (e.metaKey || e.ctrlKey) return; // reserve cmd/ctrl combos for other handlers
-      if (e.key === 'q' || e.key === 'Q') { sfx.click(); this.#editor.setTransformMode('select'); }
-      else if (e.key === 'w' || e.key === 'W') { sfx.click(); this.#editor.setTransformMode('translate'); }
-      else if (e.key === 'e' || e.key === 'E') { sfx.click(); this.#editor.setTransformMode('rotate'); }
-      else if (e.key === 'r' || e.key === 'R') {
+      const k = e.key.toLowerCase();
+      if (k === SC.transform.select.key)    { sfx.click(); this.#editor.setTransformMode('select'); }
+      else if (k === SC.transform.translate.key) { sfx.click(); this.#editor.setTransformMode('translate'); }
+      else if (k === SC.transform.rotate.key)    { sfx.click(); this.#editor.setTransformMode('rotate'); }
+      else if (k === SC.transform.scale.key) {
         const id = this.#editor.selectedEntityId;
         if (!this.#editor.isScaleLocked(id)) { sfx.click(); this.#editor.setTransformMode('scale'); }
       }
-      else if (e.key === '8') { sfx.click(); this.#editor.setViewMode('default'); }
-      else if (e.key === '9') { sfx.click(); this.#editor.setViewMode('unlit'); }
-      else if (e.key === '0') { sfx.click(); this.#editor.setViewMode('wireframe'); }
+      else if (e.key === SC.view.lit.key)        { sfx.click(); this.#editor.setViewMode('default'); }
+      else if (e.key === SC.view.solid.key)      { sfx.click(); this.#editor.setViewMode('unlit'); }
+      else if (e.key === SC.view.wireframe.key)  { sfx.click(); this.#editor.setViewMode('wireframe'); }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         const id = this.#editor.selectedEntityId;
         if (id !== null && !this.#editor.isUndeletable(id)) {
@@ -117,10 +119,10 @@ export class TransformToolbar {
     this.#el.innerHTML = `
       <div class="vt-left">
         <div class="vt-group">
-          ${btn('select',    ico.select,    mode === 'select',    'Cursor [Q]')}
-          ${btn('translate', ico.translate, mode === 'translate', 'Position [W]')}
-          ${btn('rotate',    ico.rotate,    mode === 'rotate',    'Rotation [E]')}
-          ${btn('scale',     ico.scale,     mode === 'scale',     'Scale [R]', scaleLocked)}
+          ${btn('select',    ico.select,    mode === 'select',    `Cursor [${SC.transform.select.display}]`)}
+          ${btn('translate', ico.translate, mode === 'translate', `Position [${SC.transform.translate.display}]`)}
+          ${btn('rotate',    ico.rotate,    mode === 'rotate',    `Rotation [${SC.transform.rotate.display}]`)}
+          ${btn('scale',     ico.scale,     mode === 'scale',     `Scale [${SC.transform.scale.display}]`, scaleLocked)}
         </div>
         <div class="vt-group vt-snap-group">
           <button class="vt-btn vt-snap-btn${this.#snapEnabled ? ' active' : ''}" data-action="snap-toggle" title="Grid Snap">
@@ -137,9 +139,9 @@ export class TransformToolbar {
         </div>
       </div>
       <div class="vt-group">
-        ${btn('view-default',   ico.lit,   view === 'default',   'Lit [8]')}
-        ${btn('view-unlit',     ico.unlit, view === 'unlit',     'Solid [9]')}
-        ${btn('view-wireframe', ico.wire,  view === 'wireframe', 'Wireframe [0]')}
+        ${btn('view-default',   ico.lit,   view === 'default',   `Lit [${SC.view.lit.display}]`)}
+        ${btn('view-unlit',     ico.unlit, view === 'unlit',     `Solid [${SC.view.solid.display}]`)}
+        ${btn('view-wireframe', ico.wire,  view === 'wireframe', `Wireframe [${SC.view.wireframe.display}]`)}
       </div>
     `;
 

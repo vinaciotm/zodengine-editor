@@ -111,7 +111,10 @@ export class HierarchyPanel {
       row.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        row.style.outline = '1px dashed var(--accent,#4a9eff)';
+        // Highlight groups differently: filled border = drop into group
+        row.style.outline = isGroup
+          ? '2px solid var(--accent,#4a9eff)'
+          : '1px dashed var(--accent,#4a9eff)';
       });
       row.addEventListener('dragleave', () => { row.style.outline = ''; });
       row.addEventListener('drop', (e) => {
@@ -120,8 +123,23 @@ export class HierarchyPanel {
         const srcId = this.#dragSrcId;
         this.#dragSrcId = null;
         if (srcId === null || srcId === id) return;
-        editor.world.moveEntityBefore(srcId, id);
-        editor.emit('hierarchy:changed');
+        if (isGroup) {
+          // Drop ON a group header → make src a child of this group
+          editor.setEntityParent(srcId, id);
+        } else {
+          const tgtHasParent = editor.world.hasComponent(id, ParentComponent);
+          if (tgtHasParent) {
+            // Drop on a child → move src into same group, before target
+            const tgtPc = editor.world.getComponent(id, ParentComponent);
+            editor.setEntityParent(srcId, tgtPc.parentId);
+            editor.world.moveEntityBefore(srcId, id);
+          } else {
+            // Drop on a root entity → remove src from group (if any), reorder
+            editor.removeEntityFromGroup(srcId);
+            editor.world.moveEntityBefore(srcId, id);
+            editor.emit('hierarchy:changed');
+          }
+        }
       });
 
       const indentEl = document.createElement('span');

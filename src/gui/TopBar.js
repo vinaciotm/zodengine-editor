@@ -1,6 +1,7 @@
 import { showModal, showNewSceneModal, showToast, showConfirm } from './utils.js';
 import { sfx } from './sfx.js';
 import { DeleteSceneCommand, AddSceneCommand } from '../editor/CommandManager.js';
+import { SC, SHORTCUT_SECTIONS } from '../editor/shortcuts.js';
 
 export class TopBar {
   #el = null;
@@ -350,39 +351,19 @@ export class TopBar {
   }
 
   #showShortcuts() {
+    const sectionsHtml = SHORTCUT_SECTIONS.map(({ title, group }) => {
+      const rows = Object.values(SC[group]).map(s =>
+        `<div class="shortcut-row"><kbd>${s.display}</kbd><span>${s.label}</span></div>`
+      ).join('');
+      return `<div class="shortcuts-section"><div class="shortcuts-title">${title}</div>${rows}</div>`;
+    }).join('');
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
       <div class="modal shortcuts-modal">
         <h2>&#9875; Atalhos</h2>
-        <div class="shortcuts-grid">
-          <div class="shortcuts-section">
-            <div class="shortcuts-title">Transformação</div>
-            <div class="shortcut-row"><kbd>Q</kbd><span>Posição</span></div>
-            <div class="shortcut-row"><kbd>W</kbd><span>Rotação</span></div>
-            <div class="shortcut-row"><kbd>E</kbd><span>Escala</span></div>
-          </div>
-          <div class="shortcuts-section">
-            <div class="shortcuts-title">Visualização</div>
-            <div class="shortcut-row"><kbd>R</kbd><span>Com luz</span></div>
-            <div class="shortcut-row"><kbd>T</kbd><span>Sem efeitos</span></div>
-            <div class="shortcut-row"><kbd>Y</kbd><span>Wireframe</span></div>
-          </div>
-          <div class="shortcuts-section">
-            <div class="shortcuts-title">Edição</div>
-            <div class="shortcut-row"><kbd>⌘C</kbd><span>Copiar</span></div>
-            <div class="shortcut-row"><kbd>⌘V</kbd><span>Colar</span></div>
-            <div class="shortcut-row"><kbd>⌘D</kbd><span>Duplicar</span></div>
-            <div class="shortcut-row"><kbd>⌘Z</kbd><span>Desfazer</span></div>
-            <div class="shortcut-row"><kbd>⌘⇧Z</kbd><span>Refazer</span></div>
-            <div class="shortcut-row"><kbd>Del</kbd><span>Deletar</span></div>
-          </div>
-          <div class="shortcuts-section">
-            <div class="shortcuts-title">Jogo</div>
-            <div class="shortcut-row"><kbd>P</kbd><span>Play / Stop</span></div>
-            <div class="shortcut-row"><kbd>⌘S</kbd><span>Salvar</span></div>
-          </div>
-        </div>
+        <div class="shortcuts-grid">${sectionsHtml}</div>
         <div class="modal-actions">
           <button class="btn btn-primary" id="sc-close">Fechar</button>
         </div>
