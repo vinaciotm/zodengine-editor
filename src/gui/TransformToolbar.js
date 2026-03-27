@@ -48,7 +48,7 @@ export class TransformToolbar {
       else if (e.key === 'u' || e.key === 'U') { sfx.click(); this.#editor.setViewMode('wireframe'); }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         const id = this.#editor.selectedEntityId;
-        if (id !== null) {
+        if (id !== null && !this.#editor.isUndeletable(id)) {
           const entityName = this.#editor.world.getComponent(id, TagComponent)?.name ?? 'Entity';
           showConfirm('Delete Entity', `Delete "${entityName}"?`, 'Delete').then(ok => {
             if (ok) { sfx.save(); this.#editor.deleteEntity(id); }

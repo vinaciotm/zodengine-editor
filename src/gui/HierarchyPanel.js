@@ -217,6 +217,7 @@ export class HierarchyPanel {
 
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (editor.isUndeletable(id)) return; // e.g. last camera
         const entityName = editor.world.getComponent(id, TagComponent)?.name ?? 'Entity';
         showConfirm('Delete Entity', `Delete "${entityName}"?`, 'Delete').then(ok => {
           if (ok) { sfx.save(); editor.deleteEntity(id); }

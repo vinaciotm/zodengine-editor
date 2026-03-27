@@ -69,6 +69,9 @@ export class Editor {
   #rightMouseDown = false;
   #keysHeld = new Set();
   #flySpeed = 8;
+  #flyPointerId = null;
+  #yaw = 0;
+  #pitch = 0;
 
   #listeners = new Map();
   container = null;
@@ -134,6 +137,7 @@ export class Editor {
       this.renderer.domElement,
     );
     this.orbitControls.enableDamping = false;
+    this.orbitControls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY };
     this.orbitControls.addEventListener('end', () => {
       const scene = this.#currentScene();
       if (scene) {
@@ -205,8 +209,11 @@ export class Editor {
     this.renderer.domElement.addEventListener("pointermove",  this.#onPointerMove);
     this.renderer.domElement.addEventListener("pointerup",    this.#onPointerUp);
     this.renderer.domElement.addEventListener("pointermove",  this.#onGizmoCursor);
-    this.renderer.domElement.addEventListener("mousedown",    this.#onRightMouseDown);
-    this.renderer.domElement.addEventListener("mouseup",      this.#onRightMouseUp);
+    // Capture phase fires BEFORE OrbitControls; setPointerCapture routes all
+    // subsequent pointer events to the canvas even if mouse leaves the viewport.
+    this.renderer.domElement.addEventListener("pointerdown", this.#onRightMouseDown, true);
+    this.renderer.domElement.addEventListener("pointermove", this.#onFlyMouseMove);
+    this.renderer.domElement.addEventListener("pointerup",   this.#onRightMouseUp);
     this.renderer.domElement.addEventListener("contextmenu",  (e) => e.preventDefault());
     window.addEventListener("keydown", this.#onFlyKeyDown);
     window.addEventListener("keyup",   this.#onFlyKeyUp);
@@ -253,7 +260,7 @@ export class Editor {
     const delta = this.#clock.getDelta();
     this.#applyFlyMovement(delta);
     this.world.update(delta);
-    this.orbitControls.update();
+    if (!this.#rightMouseDown) this.orbitControls.update();
     this.#syncHelpers();
     this.renderer.render(this.threeScene, this.camera);
     this.#updateCameraPreview();
@@ -480,20 +487,47 @@ export class Editor {
 
   #onRightMouseDown = (e) => {
     if (e.button !== 2) return;
-    this.#rightMouseDown = true;
+    e.stopPropagation();                                     // block OrbitControls
+    this.renderer.domElement.setPointerCapture(e.pointerId); // capture all events
     this.orbitControls.enabled = false;
+    this.#rightMouseDown = true;
+    this.#flyPointerId = e.pointerId;
+    // Seed yaw/pitch from quaternion (order-independent, same as Runtime)
+    const euler = new THREE.Euler();
+    euler.setFromQuaternion(this.camera.quaternion, 'YXZ');
+    this.#pitch = euler.x;
+    this.#yaw   = euler.y;
     this.renderer.domElement.style.cursor = 'crosshair';
   };
 
   #onRightMouseUp = (e) => {
     if (e.button !== 2) return;
     this.#rightMouseDown = false;
+    this.#keysHeld.clear();
+    if (this.#flyPointerId !== null) {
+      try { this.renderer.domElement.releasePointerCapture(this.#flyPointerId); } catch(_) {}
+      this.#flyPointerId = null;
+    }
     this.orbitControls.enabled = true;
+    // Sync orbit target in front of camera so pan feels natural after fly
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    this.orbitControls.target.copy(this.camera.position).addScaledVector(dir, 2);
     this.renderer.domElement.style.cursor = '';
   };
 
+  #onFlyMouseMove = (e) => {
+    if (!this.#rightMouseDown) return;
+    const sens = 0.003;
+    this.#yaw   -= e.movementX * sens;
+    this.#pitch -= e.movementY * sens;
+    this.#pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.#pitch));
+    this.camera.rotation.order = 'YXZ';
+    this.camera.rotation.set(this.#pitch, this.#yaw, 0, 'YXZ');
+  };
+
   #onFlyKeyDown = (e) => {
-    if (this.#rightMouseDown) this.#keysHeld.add(e.code);
+    this.#keysHeld.add(e.code);
   };
 
   #onFlyKeyUp = (e) => {
@@ -502,11 +536,11 @@ export class Editor {
 
   #applyFlyMovement(delta) {
     if (!this.#rightMouseDown || this.#keysHeld.size === 0) return;
-    const speed = this.#flySpeed * delta;
+    const boost = this.#keysHeld.has('ShiftLeft') || this.#keysHeld.has('ShiftRight');
+    const speed = this.#flySpeed * delta * (boost ? 4 : 1);
     const cam = this.camera;
     const forward = new THREE.Vector3();
     cam.getWorldDirection(forward);
-    forward.y = 0; forward.normalize();
     const right = new THREE.Vector3();
     right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
     const move = new THREE.Vector3();
@@ -519,7 +553,10 @@ export class Editor {
     if (move.lengthSq() > 0) {
       move.normalize().multiplyScalar(speed);
       cam.position.add(move);
-      this.orbitControls.target.add(move);
+      // Keep orbit target in front of camera during flight
+      const dir = new THREE.Vector3();
+      cam.getWorldDirection(dir);
+      this.orbitControls.target.copy(cam.position).addScaledVector(dir, 2);
     }
   }
 
@@ -893,19 +930,34 @@ export class Editor {
     });
   }
   spawnRamp() {
-    return this.spawnEntity("Ramp", (id) =>
-      this.world.addComponent(id, new MeshComponent("ramp", 0x888888)),
-    );
+    return this.spawnEntity("Ramp", (id) => {
+      this.world.addComponent(id, new MeshComponent("ramp", 0x888888));
+      const t = this.world.getComponent(id, TransformComponent);
+      if (t) t.scale.set(2, 1, 2);
+    });
   }
   spawnBarrel() {
     return this.spawnEntity("Barrel", (id) =>
       this.world.addComponent(id, new MeshComponent("barrel", 0x888888)),
     );
   }
-  spawnScrew() {
-    return this.spawnEntity("Screw", (id) =>
-      this.world.addComponent(id, new MeshComponent("screw", 0x888888)),
+  spawnTunnel() {
+    return this.spawnEntity("Tunnel", (id) =>
+      this.world.addComponent(id, new MeshComponent("tunnel", 0x888888)),
     );
+  }
+  spawnTerrain() {
+    return this.spawnEntity("Terrain", (id) => {
+      this.world.addComponent(id, new MeshComponent("terrain", 0x777777));
+      const mc = this.world.getComponent(id, MeshComponent);
+      if (mc) mc.isTerrainType = true;
+      const t = this.world.getComponent(id, TransformComponent);
+      if (t) {
+        t.position.set(0, 0, 0);
+        t.rotation.x = -Math.PI / 2;
+        t.scale.set(100, 100, 100);
+      }
+    });
   }
   // Use higher default intensities so lights are visible in physical rendering mode
   spawnPointLight() {
@@ -974,6 +1026,15 @@ export class Editor {
   }
 
   // Returns true for entity types where scale doesn't apply (camera, lights, sky)
+  isUndeletable(entityId) {
+    if (entityId === null) return false;
+    if (this.world.hasComponent(entityId, CameraComponent)) {
+      const camCount = this.world.entities.filter(id => this.world.hasComponent(id, CameraComponent)).length;
+      return camCount <= 1;
+    }
+    return false;
+  }
+
   isScaleLocked(entityId) {
     if (entityId === null) return false;
     return (
@@ -1139,6 +1200,62 @@ export class Editor {
     this.threeScene.background = new THREE.Color(hexStr);
     const scene = this.#currentScene();
     if (scene) scene.background = hexStr;
+  }
+
+  getToneMapping() {
+    return this.renderer?.toneMapping ?? THREE.ReinhardToneMapping;
+  }
+
+  setToneMapping(value) {
+    if (this.renderer) this.renderer.toneMapping = value;
+    const scene = this.#currentScene();
+    if (scene) scene.toneMapping = value;
+  }
+
+  getEnvironmentBlur() {
+    return this.threeScene.backgroundBlurriness ?? 0;
+  }
+
+  async setEnvironmentPreset(preset) {
+    const { RGBELoader } = await import('three/addons/loaders/RGBELoader.js');
+    const PMREMGenerator = THREE.PMREMGenerator;
+    const urls = {
+      none:     null,
+      forest:   'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/forest_slope_1k.hdr',
+      dawn:     'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/misty_dawn_1k.hdr',
+      studio:   'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr',
+      sunset:   'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/sunset_jhbcentral_1k.hdr',
+      overcast: 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/overcast_soil_1k.hdr',
+    };
+    if (preset === 'none' || !urls[preset]) {
+      this.threeScene.environment = null;
+      const scene = this.#currentScene();
+      if (scene) scene.envPreset = 'none';
+      return;
+    }
+    try {
+      const loader = new RGBELoader();
+      const texture = await loader.loadAsync(urls[preset]);
+      const pmrem = new PMREMGenerator(this.renderer);
+      const envMap = pmrem.fromEquirectangular(texture).texture;
+      pmrem.dispose(); texture.dispose();
+      this.threeScene.environment = envMap;
+      this.threeScene.backgroundBlurriness = this.getEnvironmentBlur();
+      const scene = this.#currentScene();
+      if (scene) scene.envPreset = preset;
+    } catch(e) {
+      console.warn('Failed to load environment preset:', e);
+    }
+  }
+
+  setEnvironmentBlur(value) {
+    this.threeScene.backgroundBlurriness = value;
+    const scene = this.#currentScene();
+    if (scene) scene.envBlur = value;
+  }
+
+  getEnvironmentPreset() {
+    return this.#currentScene()?.envPreset ?? 'none';
   }
 
   // --- Scene management ---
@@ -1365,6 +1482,11 @@ export class Editor {
     this.renderer.domElement.removeEventListener("pointermove", this.#onPointerMove);
     this.renderer.domElement.removeEventListener("pointerup",   this.#onPointerUp);
     this.renderer.domElement.removeEventListener("pointermove", this.#onGizmoCursor);
+    this.renderer.domElement.removeEventListener("pointerdown", this.#onRightMouseDown, true);
+    this.renderer.domElement.removeEventListener("pointermove", this.#onFlyMouseMove);
+    this.renderer.domElement.removeEventListener("pointerup",   this.#onRightMouseUp);
+    window.removeEventListener("keydown",   this.#onFlyKeyDown);
+    window.removeEventListener("keyup",     this.#onFlyKeyUp);
     this.orbitControls.dispose();
     this.transformControls.dispose();
     this.renderer.dispose();

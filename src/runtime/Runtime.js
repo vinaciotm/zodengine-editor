@@ -187,7 +187,8 @@ export class Runtime {
     const delta = this.#clock.getDelta();
 
     // FPS movement
-    const speed = 5 * delta;
+    const boost = this.#keys['ShiftLeft'] || this.#keys['ShiftRight'];
+    const speed = 5 * delta * (boost ? 4 : 1);
     const anyMove = this.#keys['KeyW'] || this.#keys['KeyS'] || this.#keys['KeyA'] ||
                     this.#keys['KeyD'] || this.#keys['KeyE'] || this.#keys['KeyQ'];
     if (anyMove) {

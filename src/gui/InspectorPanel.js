@@ -1,3 +1,4 @@
+import * as THREE from 'three/webgpu';
 import { numInput, dragNum, colorToHex, hexToNum, makeCollapsiblePanel } from './utils.js';
 import { sfx } from './sfx.js';
 import { getEntityIconType, iconURL } from './entityIcons.js';
@@ -137,45 +138,95 @@ export class InspectorPanel {
 
   #renderSceneSettings(content) {
     const name = this.#editor.getSceneName();
-    const bg = this.#editor.getSceneBackground();
+    const bg   = this.#editor.getSceneBackground();
 
     const wrap = document.createElement('div');
     wrap.style.cssText = 'padding:8px 12px;';
 
-    const label = document.createElement('div');
-    label.style.cssText = 'font-size:10px;text-transform:uppercase;color:var(--text-muted,#888);letter-spacing:0.5px;margin-bottom:10px;';
-    label.textContent = 'Scene Settings';
-    wrap.appendChild(label);
+    const heading = (text) => {
+      const el = document.createElement('div');
+      el.style.cssText = 'font-size:10px;text-transform:uppercase;color:var(--text-muted,#888);letter-spacing:0.5px;margin:10px 0 6px;';
+      el.textContent = text;
+      wrap.appendChild(el);
+    };
+    const mkRow = (labelText) => {
+      const row = document.createElement('div');
+      row.className = 'inspector-row';
+      row.innerHTML = `<span class="inspector-label">${labelText}</span>`;
+      wrap.appendChild(row);
+      return row;
+    };
+    const mkSel = (options, currentVal, onChange) => {
+      const sel = document.createElement('select');
+      sel.className = 'inspector-select';
+      for (const [val, lbl] of options) {
+        const opt = document.createElement('option');
+        opt.value = val; opt.textContent = lbl;
+        if (val === String(currentVal)) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener('change', () => onChange(sel.value));
+      return sel;
+    };
 
-    // Scene name row
-    const nameRow = document.createElement('div');
-    nameRow.className = 'inspector-row';
-    nameRow.innerHTML = '<span class="inspector-label">Name</span>';
+    heading('Scene');
+    const nameRow = mkRow('Name');
     const nameInp = document.createElement('input');
     nameInp.className = 'inspector-input';
-    nameInp.value = name;
-    nameInp.style.flex = '1';
-    nameInp.addEventListener('change', () => {
-      this.#editor.renameScene(this.#editor.currentSceneIndex, nameInp.value.trim() || name);
-    });
+    nameInp.value = name; nameInp.style.flex = '1';
+    nameInp.addEventListener('change', () => this.#editor.renameScene(this.#editor.currentSceneIndex, nameInp.value.trim() || name));
     nameRow.appendChild(nameInp);
-    wrap.appendChild(nameRow);
 
-    // Background color row
-    const bgRow = document.createElement('div');
-    bgRow.className = 'inspector-row';
-    bgRow.style.marginTop = '6px';
-    bgRow.innerHTML = '<span class="inspector-label">Background</span>';
+    const bgRow = mkRow('Background');
+    bgRow.style.marginTop = '4px';
     const bgInp = document.createElement('input');
-    bgInp.type = 'color';
-    bgInp.className = 'inspector-input';
-    bgInp.value = bg;
+    bgInp.type = 'color'; bgInp.className = 'inspector-input'; bgInp.value = bg;
     bgInp.style.cssText = 'width:44px;padding:1px 2px;height:24px;cursor:pointer;';
-    bgInp.addEventListener('input', () => {
-      this.#editor.setSceneBackground(bgInp.value);
-    });
+    bgInp.addEventListener('input', () => this.#editor.setSceneBackground(bgInp.value));
     bgRow.appendChild(bgInp);
-    wrap.appendChild(bgRow);
+
+    heading('Rendering');
+    const tmRow = mkRow('ToneMap');
+    const TM = THREE;
+    const tmOptions = [
+      [String(TM.ReinhardToneMapping),    'Reinhard'],
+      [String(TM.ACESFilmicToneMapping),  'ACES Filmic'],
+      [String(TM.LinearToneMapping),      'Linear'],
+      [String(TM.CineonToneMapping),      'Cineon'],
+      [String(TM.AgXToneMapping ?? 7),    'AgX'],
+      [String(TM.NoToneMapping),          'None'],
+    ];
+    const tmSel = mkSel(tmOptions, this.#editor.getToneMapping(), (v) => this.#editor.setToneMapping(Number(v)));
+    tmRow.appendChild(tmSel);
+
+    heading('Environment');
+    const envRow = mkRow('Preset');
+    const envOptions = [
+      ['none','None'],['forest','Forest'],['dawn','Dawn'],
+      ['studio','Studio'],['sunset','Sunset'],['overcast','Overcast'],
+    ];
+    const currentEnv = this.#editor.getEnvironmentPreset?.() ?? 'none';
+    const envSel = mkSel(envOptions, currentEnv, (v) => this.#editor.setEnvironmentPreset(v));
+    envRow.appendChild(envSel);
+
+    const blurRow = mkRow('Blur');
+    blurRow.style.marginTop = '4px';
+    const blurWrap = document.createElement('div');
+    blurWrap.style.cssText = 'display:flex;align-items:center;gap:6px;flex:1;';
+    const blurSlider = document.createElement('input');
+    blurSlider.type = 'range'; blurSlider.min = '0'; blurSlider.max = '1'; blurSlider.step = '0.01';
+    blurSlider.value = String(this.#editor.getEnvironmentBlur());
+    blurSlider.style.flex = '1';
+    const blurVal = document.createElement('span');
+    blurVal.style.cssText = 'font-size:10px;color:var(--text-muted,#888);min-width:28px;';
+    blurVal.textContent = blurSlider.value;
+    blurSlider.addEventListener('input', () => {
+      blurVal.textContent = blurSlider.value;
+      this.#editor.setEnvironmentBlur(parseFloat(blurSlider.value));
+    });
+    blurWrap.appendChild(blurSlider);
+    blurWrap.appendChild(blurVal);
+    blurRow.appendChild(blurWrap);
 
     content.appendChild(wrap);
   }
@@ -271,7 +322,7 @@ export class InspectorPanel {
     typeRow.innerHTML = '<span class="inspector-label">Type</span>';
     const sel = document.createElement('select');
     sel.className = 'inspector-select';
-    ['box','sphere','cone','cylinder','capsule','plane','ramp','barrel','screw'].forEach(t => {
+    ['box','sphere','cone','cylinder','capsule','plane','ramp','barrel','tunnel','terrain'].forEach(t => {
       const opt = document.createElement('option');
       opt.value = t; opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
       if (t === mesh.type) opt.selected = true;

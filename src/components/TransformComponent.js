@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 export class TransformComponent {
   constructor() {
     this.position = new THREE.Vector3(0, 0, 0);
-    this.rotation = new THREE.Euler(0, 0, 0);
+    this.rotation = new THREE.Euler(0, 0, 0, 'YXZ');
     this.scale = new THREE.Vector3(1, 1, 1);
   }
   serialize() {

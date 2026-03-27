@@ -20,22 +20,30 @@ export class RenderSystem {
   #parentCompClass = null;
   #checkerTexture = null;
 
-  #makeCheckerTexture() {
-    if (this.#checkerTexture) return this.#checkerTexture;
-    const size = 128;
-    const half = size / 2;
+  #checkerTerrainTexture = null;
+
+  #makeCheckerTexture(terrain = false) {
+    if (!terrain && this.#checkerTexture) return this.#checkerTexture;
+    if (terrain && this.#checkerTerrainTexture) return this.#checkerTerrainTexture;
+    const size = 128, half = size / 2;
     const canvas = document.createElement('canvas');
     canvas.width = size; canvas.height = size;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#999999'; ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = '#c0c0c0';
+    if (terrain) {
+      ctx.fillStyle = '#aaaaaa'; ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = '#d0d0d0';
+    } else {
+      ctx.fillStyle = '#999999'; ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = '#c0c0c0';
+    }
     ctx.fillRect(0, 0, half, half);
     ctx.fillRect(half, half, half, half);
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(1, 1);
-    this.#checkerTexture = tex;
+    if (terrain) this.#checkerTerrainTexture = tex;
+    else this.#checkerTexture = tex;
     return tex;
   }
 
@@ -55,6 +63,7 @@ export class RenderSystem {
     }
     const obj = this.#buildObject3D(entityId);
     obj.userData.entityId = entityId;
+    obj.rotation.order = 'YXZ';
     this.scene.add(obj);
     this.entityObjects.set(entityId, obj);
     return obj;
@@ -214,11 +223,29 @@ export class RenderSystem {
         obj.rotation.copy(t.rotation);
         obj.scale.copy(t.scale);
 
-        // Sync checker texture repeat to world scale so tiles stay world-unit size
-        if (obj.isMesh && obj.material?.userData?.isCheckerMat && obj.material.map) {
-          const rx = Math.max(0.01, Math.abs(t.scale.x));
-          const ry = Math.max(0.01, Math.abs(t.scale.z));
-          obj.material.map.repeat.set(rx, ry);
+        // Sync checker texture repeat so tiles stay 1-unit size regardless of scale/rotation.
+        // UV.u maps along local X, UV.v along local Y → use local scale directly.
+        if (obj.isMesh) {
+          const sx = Math.max(0.01, Math.abs(t.scale.x));
+          const sy = Math.max(0.01, Math.abs(t.scale.y));
+          const sz = Math.max(0.01, Math.abs(t.scale.z));
+          if (Array.isArray(obj.material)) {
+            let repeats;
+            if (obj.userData.meshType === 'ramp') {
+              // Ramp: bottom(sx,sz), back(sx,sy), slope(sx,sy), left(sz,sy), right(sz,sy)
+              repeats = [[sx,sz],[sx,sy],[sx,sy],[sz,sy],[sz,sy]];
+            } else {
+              // Box: 6 face materials [+X,-X,+Y,-Y,+Z,-Z]
+              // +X/-X: U=Z,V=Y; +Y/-Y: U=X,V=Z; +Z/-Z: U=X,V=Y
+              repeats = [[sz,sy],[sz,sy],[sx,sz],[sx,sz],[sx,sy],[sx,sy]];
+            }
+            for (let i = 0; i < obj.material.length; i++) {
+              const m = obj.material[i];
+              if (m?.userData?.isCheckerMat && m.map) m.map.repeat.set(repeats[i][0], repeats[i][1]);
+            }
+          } else if (obj.material?.userData?.isCheckerMat && obj.material.map) {
+            obj.material.map.repeat.set(sx, sy);
+          }
         }
 
         // Counter-scale editor icon children so scale gizmo doesn't distort them.
@@ -303,79 +330,200 @@ export class RenderSystem {
       plane:    () => new THREE.PlaneGeometry(1, 1),
       ramp:     () => this.#makeRampGeo(),
       barrel:   () => this.#makeBarrelGeo(),
-      screw:    () => new THREE.TorusKnotGeometry(0.35, 0.12, 128, 16, 2, 3),
+      tunnel:   () => this.#makeTunnelGeo(),
+      terrain:  () => new THREE.PlaneGeometry(1, 1, 32, 32),
     };
     const geo = (geos[comp.type] ?? geos.box)();
 
-    const checkerTex = this.#makeCheckerTexture().clone();
-    checkerTex.needsUpdate = true;
-    checkerTex.wrapS = THREE.RepeatWrapping;
-    checkerTex.wrapT = THREE.RepeatWrapping;
+    const isTerrain = comp.type === 'terrain';
 
-    const base = { color: comp.color, map: checkerTex };
+    const makeMat = () => {
+      const tex = this.#makeCheckerTexture(isTerrain).clone();
+      tex.needsUpdate = true; tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+      const base = { color: comp.color, map: tex };
+      let m;
+      switch (comp.materialType ?? 'standard') {
+        case 'phong':    m = new THREE.MeshPhongMaterial({ ...base, shininess: comp.shininess ?? 30 }); break;
+        case 'lambert':  m = new THREE.MeshLambertMaterial(base); break;
+        case 'basic':    m = new THREE.MeshBasicMaterial(base); break;
+        case 'toon':     m = new THREE.MeshToonMaterial(base); break;
+        default:         m = new THREE.MeshStandardMaterial({ ...base, roughness: comp.roughness ?? 0.5, metalness: comp.metalness ?? 0 });
+      }
+      if ((comp.opacity ?? 1) < 1) { m.transparent = true; m.opacity = comp.opacity; }
+      if (comp.wireframe) m.wireframe = true;
+      m.userData.isCheckerMat = true;
+      return m;
+    };
+
+    // BoxGeometry uses 6 face materials, ramp uses 5, others use 1
     let mat;
-    switch (comp.materialType ?? 'standard') {
-      case 'phong':
-        mat = new THREE.MeshPhongMaterial({ ...base, shininess: comp.shininess ?? 30 });
-        break;
-      case 'lambert':
-        mat = new THREE.MeshLambertMaterial(base);
-        break;
-      case 'basic':
-        mat = new THREE.MeshBasicMaterial(base);
-        break;
-      case 'toon':
-        mat = new THREE.MeshToonMaterial(base);
-        break;
-      default:
-        mat = new THREE.MeshStandardMaterial({ ...base, roughness: comp.roughness ?? 0.5, metalness: comp.metalness ?? 0 });
+    if (comp.type === 'box') {
+      mat = [makeMat(), makeMat(), makeMat(), makeMat(), makeMat(), makeMat()];
+    } else if (comp.type === 'ramp') {
+      mat = [makeMat(), makeMat(), makeMat(), makeMat(), makeMat()];
+    } else {
+      mat = makeMat();
     }
-    if ((comp.opacity ?? 1) < 1) { mat.transparent = true; mat.opacity = comp.opacity; }
-    if (comp.wireframe) mat.wireframe = true;
-    mat.userData.isCheckerMat = true;
+
     const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData.meshType = comp.type;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     return mesh;
   }
 
   #makeRampGeo() {
-    // Wedge/ramp: 6 vertices - 4 on bottom, 2 elevated at back
-    // v0=front-left-bottom, v1=front-right-bottom, v2=back-left-bottom, v3=back-right-bottom
-    // v4=back-left-top,     v5=back-right-top
+    // A box where the top-front edge is removed → wedge with 5 faces
+    // Bottom: rect, Back: rect (vertical), Slope: rect (diagonal), Left/Right: triangles
+    const positions = [];
+    const normals = [];
+    const uvs = [];
+    const indices = [];
+
+    const addFace = (verts, nx, ny, nz, uCoords, vCoords) => {
+      const base = positions.length / 3;
+      for (let i = 0; i < verts.length; i++) {
+        positions.push(verts[i][0], verts[i][1], verts[i][2]);
+        normals.push(nx, ny, nz);
+        uvs.push(uCoords[i], vCoords[i]);
+      }
+      // Two triangles (quad)
+      if (verts.length === 4) {
+        indices.push(base, base+1, base+2, base, base+2, base+3);
+      } else {
+        indices.push(base, base+1, base+2);
+      }
+    };
+
+    // Vertices: BFL=back-front-left (confusing), let me name clearly
+    // fl=front-left, fr=front-right, bl=back-left, br=back-right (all at y=0)
+    // tbl=top-back-left, tbr=top-back-right (at y=1)
+    const fl = [-0.5,0, 0.5], fr = [0.5,0, 0.5];
+    const bl = [-0.5,0,-0.5], br = [0.5,0,-0.5];
+    const tbl= [-0.5,1,-0.5], tbr= [0.5,1,-0.5];
+
+    // Bottom face (facing -Y)
+    addFace([fl,bl,br,fr], 0,-1,0, [0,0,1,1],[0,1,1,0]);
+    // Back vertical face (facing -Z)
+    addFace([bl,tbl,tbr,br], 0,0,-1, [0,0,1,1],[0,1,1,0]);
+    // Slope top face
+    const slopeLen = Math.sqrt(1+1); const nsy = 1/slopeLen, nsz = 1/slopeLen;
+    addFace([fl,fr,tbr,tbl], 0,nsy,nsz, [0,1,1,0],[0,0,1,1]);
+    // Left triangle face (facing -X)
+    addFace([fl,tbl,bl], -1,0,0, [1,0,0],[0,1,0]);
+    // Right triangle face (facing +X)
+    addFace([fr,br,tbr], 1,0,0, [0,1,1],[0,0,1]);
+
     const geo = new THREE.BufferGeometry();
-    const v = new Float32Array([
-      -0.5, 0,  0.5,   // 0 front-left-bottom
-       0.5, 0,  0.5,   // 1 front-right-bottom
-      -0.5, 0, -0.5,   // 2 back-left-bottom
-       0.5, 0, -0.5,   // 3 back-right-bottom
-      -0.5, 1, -0.5,   // 4 back-left-top
-       0.5, 1, -0.5,   // 5 back-right-top
-    ]);
-    const idx = [
-      0,2,1, 1,2,3,   // bottom (CCW from below)
-      2,4,3, 3,4,5,   // back vertical face
-      0,1,4, 1,5,4,   // slope (top face)
-      0,4,2,           // left triangle
-      1,3,5,           // right triangle
-    ];
-    geo.setIndex(idx);
-    geo.setAttribute('position', new THREE.BufferAttribute(v, 3));
-    geo.computeVertexNormals();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+    geo.setAttribute('normal',   new THREE.BufferAttribute(new Float32Array(normals),   3));
+    geo.setAttribute('uv',       new THREE.BufferAttribute(new Float32Array(uvs),       2));
+    geo.setIndex(indices);
+    // Groups for per-face materials: bottom(6), back(6), slope(6), left(3), right(3)
+    geo.addGroup(0,  6, 0);
+    geo.addGroup(6,  6, 1);
+    geo.addGroup(12, 6, 2);
+    geo.addGroup(18, 3, 3);
+    geo.addGroup(21, 3, 4);
     return geo;
   }
 
   #makeBarrelGeo() {
     const pts = [];
-    const segments = 12;
+    const segments = 16;
     for (let i = 0; i <= segments; i++) {
-      const t = i / segments; // 0..1
-      const y = t - 0.5; // -0.5..0.5
-      // Barrel bulge: radius varies as 0.4 + 0.1*sin(pi*t)
-      const r = 0.4 + 0.12 * Math.sin(Math.PI * t);
+      const t = i / segments;
+      const y = t - 0.5;
+      const r = 0.38 + 0.12 * Math.sin(Math.PI * t);
       pts.push(new THREE.Vector2(r, y));
     }
-    return new THREE.LatheGeometry(pts, 24);
+    // openEnded=false adds top/bottom caps
+    const geo = new THREE.LatheGeometry(pts, 24);
+    // LatheGeometry doesn't add caps — add them manually as discs
+    const topR    = pts[pts.length-1].x;
+    const botR    = pts[0].x;
+    const topY    = pts[pts.length-1].y;
+    const botY    = pts[0].y;
+    const topCap  = new THREE.CircleGeometry(topR, 24);
+    topCap.rotateX(-Math.PI / 2); // face +Y
+    topCap.translate(0, topY, 0);
+    const botCap  = new THREE.CircleGeometry(botR, 24);
+    botCap.rotateX(Math.PI / 2);  // face -Y
+    botCap.translate(0, botY, 0);
+    return this.#mergeGeos([geo, topCap, botCap]);
+  }
+
+  #makeTunnelGeo() {
+    // Hollow cylinder = outer cylinder - inner hole. Use CylinderGeometry with openEnded + caps as rings.
+    const outerR = 0.5, innerR = 0.3, height = 1, segs = 32;
+    const outer = new THREE.CylinderGeometry(outerR, outerR, height, segs, 1, true);
+    const inner = new THREE.CylinderGeometry(innerR, innerR, height, segs, 1, true);
+    // Flip inner normals
+    const innerPos = inner.attributes.position.array;
+    const innerNorm = inner.attributes.normal.array;
+    for (let i = 0; i < innerNorm.length; i += 3) {
+      innerNorm[i] *= -1; innerNorm[i+1] *= -1; innerNorm[i+2] *= -1;
+    }
+    const innerIdx = inner.index.array;
+    for (let i = 0; i < innerIdx.length; i += 3) {
+      const tmp = innerIdx[i]; innerIdx[i] = innerIdx[i+2]; innerIdx[i+2] = tmp;
+    }
+    inner.attributes.normal.needsUpdate = true;
+    // Ring caps (annular discs at top and bottom)
+    const topRing = this.#makeAnnularRing(innerR, outerR, segs,  height/2, false);
+    const botRing = this.#makeAnnularRing(innerR, outerR, segs, -height/2, true);
+    return this.#mergeGeos([outer, inner, topRing, botRing]);
+  }
+
+  #makeAnnularRing(innerR, outerR, segs, y, flipY) {
+    const positions = [], normals = [], uvs = [], indices = [];
+    const ny = flipY ? -1 : 1;
+    for (let i = 0; i <= segs; i++) {
+      const a = (i / segs) * Math.PI * 2;
+      const cos = Math.cos(a), sin = Math.sin(a);
+      positions.push(cos*outerR, y, sin*outerR, cos*innerR, y, sin*innerR);
+      normals.push(0,ny,0, 0,ny,0);
+      uvs.push(0.5+cos*0.5, 0.5+sin*0.5, 0.5+cos*0.3, 0.5+sin*0.3);
+    }
+    for (let i = 0; i < segs; i++) {
+      const a = i*2, b = i*2+1, c = (i+1)*2, d = (i+1)*2+1;
+      if (flipY) { indices.push(a,d,b, a,c,d); } else { indices.push(a,b,d, a,d,c); }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+    geo.setAttribute('normal',   new THREE.BufferAttribute(new Float32Array(normals),   3));
+    geo.setAttribute('uv',       new THREE.BufferAttribute(new Float32Array(uvs),       2));
+    geo.setIndex(indices);
+    return geo;
+  }
+
+  #mergeGeos(geos) {
+    // Simple manual merge of BufferGeometries
+    let totalVerts = 0, totalIdx = 0;
+    for (const g of geos) { totalVerts += g.attributes.position.count; totalIdx += (g.index?.count ?? 0); }
+    const pos = new Float32Array(totalVerts * 3);
+    const nor = new Float32Array(totalVerts * 3);
+    const uv  = new Float32Array(totalVerts * 2);
+    const idx = new Uint32Array(totalIdx);
+    let vOff = 0, iOff = 0, vertBase = 0;
+    for (const g of geos) {
+      const p = g.attributes.position.array;
+      const n = g.attributes.normal?.array;
+      const u = g.attributes.uv?.array;
+      const ii = g.index?.array;
+      pos.set(p, vOff * 3);
+      if (n) nor.set(n, vOff * 3);
+      if (u) uv.set(u, vOff * 2);
+      if (ii) { for (let i = 0; i < ii.length; i++) idx[iOff + i] = ii[i] + vertBase; iOff += ii.length; }
+      vertBase += g.attributes.position.count;
+      vOff     += g.attributes.position.count;
+    }
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    merged.setAttribute('normal',   new THREE.BufferAttribute(nor, 3));
+    merged.setAttribute('uv',       new THREE.BufferAttribute(uv,  2));
+    if (totalIdx) merged.setIndex(new THREE.BufferAttribute(idx, 1));
+    return merged;
   }
 
   #makeLight(comp) {

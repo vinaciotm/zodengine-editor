@@ -334,6 +334,109 @@ export function drawIconCanvas(type) {
     ctx.strokeStyle = 'rgba(180,210,240,0.8)'; ctx.lineWidth = 0.8;
     ctx.strokeRect(fx, fy, fw, fh);
 
+  } else if (type === 'mesh_ramp') {
+    // Isometric wedge / ramp
+    const s = 6.5, ox = cx + 0.5, oy = cy + 2;
+    const iso = (x, y, z) => [ox + (x - z) * s * 0.866, oy + (x + z) * s * 0.5 - y * s];
+    const poly = (pts, fill, stroke) => {
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 0.8; ctx.stroke(); }
+    };
+    const BFL=iso(-1,0,1), BFR=iso(1,0,1), BBL=iso(-1,0,-1), BBR=iso(1,0,-1);
+    const TBL=iso(-1,1.2,-1), TBR=iso(1,1.2,-1);
+    poly([BFL,BFR,BBR,BBL], '#3a7ab8', '#5090cc');  // bottom
+    poly([BBL,BBR,TBR,TBL], '#2a5c98', '#4a80c0');  // back vertical
+    poly([BFL,BFR,TBR,TBL], '#6aaee0', '#9dccf0');  // slope top
+
+  } else if (type === 'mesh_barrel') {
+    // Barrel / cask shape
+    const rx = 9, topY = cy - 10, botY = cy + 10, midRx = 11.5, ry = 3.5;
+    const g = ctx.createLinearGradient(cx - midRx, 0, cx + midRx, 0);
+    g.addColorStop(0, '#2a5c98'); g.addColorStop(0.35, '#4a8acc'); g.addColorStop(0.55, '#6aaee0'); g.addColorStop(1, '#2a5c98');
+    // Barrel body outline (bulging sides)
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(cx - rx, topY);
+    ctx.bezierCurveTo(cx - midRx, topY + 7, cx - midRx, botY - 7, cx - rx, botY);
+    ctx.ellipse(cx, botY, rx, ry, 0, Math.PI, 0, true);
+    ctx.bezierCurveTo(cx + midRx, botY - 7, cx + midRx, topY + 7, cx + rx, topY);
+    ctx.ellipse(cx, topY, rx, ry, 0, 0, Math.PI, true);
+    ctx.closePath(); ctx.fill();
+    // Top cap
+    const tg = ctx.createRadialGradient(cx - 3, topY, 1, cx, topY, rx + 2);
+    tg.addColorStop(0, '#bbddff'); tg.addColorStop(1, '#3a7ac0');
+    ctx.fillStyle = tg;
+    ctx.beginPath(); ctx.ellipse(cx, topY, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#88bbdd'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.ellipse(cx, topY, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cx, botY, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+    // Hoops
+    ctx.strokeStyle = 'rgba(30,60,110,0.7)'; ctx.lineWidth = 1.2;
+    for (const hy of [topY + 4, cy, botY - 4]) {
+      const hbulge = (hy === cy) ? midRx : rx + 1;
+      ctx.beginPath(); ctx.ellipse(cx, hy, hbulge, ry * 0.7, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+
+  } else if (type === 'mesh_tunnel') {
+    // Hollow cylinder - ring shape
+    const outerRx = 12, innerRx = 6, outerRy = 4.2, innerRy = 2.1;
+    const topY = cy - 9, botY = cy + 9;
+    // Outer body
+    const g = ctx.createLinearGradient(cx - outerRx, 0, cx + outerRx, 0);
+    g.addColorStop(0, '#2a5c98'); g.addColorStop(0.4, '#5090cc'); g.addColorStop(0.6, '#6aabe0'); g.addColorStop(1, '#2a5c98');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(cx - outerRx, topY); ctx.lineTo(cx - outerRx, botY);
+    ctx.ellipse(cx, botY, outerRx, outerRy, 0, Math.PI, 0, true); ctx.lineTo(cx + outerRx, topY);
+    ctx.ellipse(cx, topY, outerRx, outerRy, 0, 0, Math.PI, true); ctx.closePath(); ctx.fill();
+    // Top ring (annular) - dark hole
+    ctx.fillStyle = '#1a2a3a';
+    ctx.beginPath(); ctx.ellipse(cx, topY, outerRx, outerRy, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(cx, topY, outerRx, outerRy, 0, 0, Math.PI*2); ctx.fill();
+    // Ring top cap
+    const tg = ctx.createRadialGradient(cx, topY, innerRx - 1, cx, topY, outerRx);
+    tg.addColorStop(0, '#1a2a3a'); tg.addColorStop(0.25, '#1a2a3a'); tg.addColorStop(0.35, '#4a8acc'); tg.addColorStop(1, '#3a6aaa');
+    ctx.fillStyle = tg;
+    ctx.beginPath(); ctx.ellipse(cx, topY, outerRx, outerRy, 0, 0, Math.PI*2); ctx.fill();
+    // Inner cylinder hole (dark)
+    ctx.fillStyle = '#0e1822';
+    ctx.beginPath(); ctx.moveTo(cx - innerRx, topY); ctx.lineTo(cx - innerRx, botY);
+    ctx.ellipse(cx, botY, innerRx, innerRy, 0, Math.PI, 0, true); ctx.lineTo(cx + innerRx, topY);
+    ctx.ellipse(cx, topY, innerRx, innerRy, 0, 0, Math.PI, true); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#88bbdd'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.ellipse(cx, topY, outerRx, outerRy, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cx, botY, outerRx, outerRy, 0, 0, Math.PI*2); ctx.stroke();
+
+  } else if (type === 'mesh_terrain') {
+    // Flat plane with grid lines, slightly darker gray
+    const pts = [[cx-13,cy+7],[cx+13,cy+7],[cx+9,cy-7],[cx-9,cy-7]];
+    const g = ctx.createLinearGradient(0, cy-7, 0, cy+7);
+    g.addColorStop(0, '#3a6a88'); g.addColorStop(1, '#1a3a58');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+    for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+    ctx.closePath(); ctx.fill();
+    // More grid lines for terrain
+    ctx.strokeStyle = 'rgba(120,180,255,0.35)'; ctx.lineWidth = 0.5;
+    for (const t of [1/4,2/4,3/4]) {
+      const xl=pts[0][0]+(pts[3][0]-pts[0][0])*t, xr=pts[1][0]+(pts[2][0]-pts[1][0])*t;
+      const yl=pts[0][1]+(pts[3][1]-pts[0][1])*t, yr=pts[1][1]+(pts[2][1]-pts[1][1])*t;
+      ctx.beginPath(); ctx.moveTo(xl,yl); ctx.lineTo(xr,yr); ctx.stroke();
+    }
+    for (const t of [1/4,2/4,3/4]) {
+      const xt=pts[3][0]+(pts[2][0]-pts[3][0])*t, xb=pts[0][0]+(pts[1][0]-pts[0][0])*t;
+      const yt=pts[3][1]+(pts[2][1]-pts[3][1])*t, yb=pts[0][1]+(pts[1][1]-pts[0][1])*t;
+      ctx.beginPath(); ctx.moveTo(xt,yt); ctx.lineTo(xb,yb); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(120,180,255,0.65)'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+    for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+    ctx.closePath(); ctx.stroke();
+
   } else if (type === 'mesh_plane') {
     const pts = [[cx - 13, cy + 7], [cx + 13, cy + 7], [cx + 9, cy - 7], [cx - 9, cy - 7]];
     const g = ctx.createLinearGradient(0, cy - 7, 0, cy + 7);
